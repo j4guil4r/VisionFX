@@ -39,6 +39,7 @@ set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
 set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(assimp)
 
 pybind11_add_module(ar_helmet_core bindings/pybind_wrapper.cpp src/shader.cpp src/renderer.cpp src/model.cpp)
