@@ -1,0 +1,37 @@
+#include "renderer.hpp"
+#include <iostream>
+#include <stdexcept>
+
+Renderer::Renderer() {
+    if (!glfwInit()) throw std::runtime_error("[ERROR] Fallo al inicializar GLFW");
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    
+    // Nota: Mantenemos la ventana de GLFW oculta. 
+    // Python se encargará de mostrar los resultados.
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+
+    // Creacion del contexto (ventana invisible de 1280x720)
+    window = glfwCreateWindow(1280, 720, "AR Helmet Core", nullptr, nullptr);
+    if (!window) {
+        glfwTerminate();
+        throw std::runtime_error("[ERROR] Fallo al crear la ventana GLFW oculta");
+    }
+
+    // Hacer que este hilo sea el dueño del contexto gráfico
+    glfwMakeContextCurrent(window);
+    
+    std::cout << "[C++] Contexto OpenGL 3.3 inicializado correctamente con GLFW.\n";
+}
+
+Renderer::~Renderer() {
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    std::cout << "[C++] Contexto GLFW destruido limpiamente.\n";
+}
+
+void Renderer::ping() {
+    std::cout << "[C++] Pong! El Renderer real esta escuchando a Python.\n";
+}

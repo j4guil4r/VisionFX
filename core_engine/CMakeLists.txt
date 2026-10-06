@@ -27,6 +27,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-pybind11_add_module(ar_helmet_core bindings/pybind_wrapper.cpp src/shader.cpp)
+pybind11_add_module(ar_helmet_core bindings/pybind_wrapper.cpp src/shader.cpp src/renderer.cpp)
 target_link_libraries(ar_helmet_core PRIVATE OpenGL::GL glfw glm::glm)
 target_include_directories(ar_helmet_core PRIVATE include)
