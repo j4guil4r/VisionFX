@@ -1,5 +1,6 @@
 #include <pybind11/pybind11.h>
 #include <iostream>
+#include "shader.hpp"
 
 namespace py = pybind11;
 
@@ -7,14 +8,15 @@ namespace py = pybind11;
 class Renderer {
 public:
     Renderer() { 
-        std::cout << "[C++] Renderer nativo inicializado en memoria.\n"; 
+        std::cout << "[C++] Renderer nativo inicializado en memoria.\n";
+        Shader testShader("dummy.vert", "dummy.frag");
     }
     void ping() { 
         std::cout << "[C++] Pong! Enlace pybind11 funcionando a la perfeccion.\n"; 
     }
 };
 
-// Módulo de enlace. El nombre 'ar_helmet_core' debe coincidir con CMake.
+
 PYBIND11_MODULE(ar_helmet_core, m) {
     m.doc() = "Core engine nativo para AR-Helmet";
     
