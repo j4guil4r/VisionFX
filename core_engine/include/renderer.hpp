@@ -1,11 +1,13 @@
 #pragma once
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <vector>
+#include <cstdint>
 #include "model.hpp"
 
 class Renderer {
 public:
-    Renderer();
+    Renderer(int width = 1280, int height = 720);
     ~Renderer();
     
     void ping();
@@ -18,6 +20,18 @@ public:
      */
     void render(const Model& model);
 
+    /**
+     * @brief Extrae los píxeles renderizados de la memoria de video.
+     * @return Vector de bytes (RGB) del fotograma actual.
+     */
+    std::vector<uint8_t> get_pixels();
+
 private:
     GLFWwindow* window;
+    int m_width, m_height;
+    
+    // Identificadores del Framebuffer oculto
+    unsigned int FBO, textureColorBuffer, RBO;
+    
+    void setupOffscreen();
 };
