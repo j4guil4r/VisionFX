@@ -39,3 +39,21 @@ Renderer::~Renderer() {
 void Renderer::ping() {
     std::cout << "[C++] Pong! El Renderer real esta escuchando a Python.\n";
 }
+
+void Renderer::render(const Model& model) {
+    glClearColor(0.15f, 0.15f, 0.18f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // TODO: llamadas a los Shaders (Fase 3)
+    // shader.use();
+    // shader.setMat4("view", matrix...);
+
+    // Despachar los buffers de vértices a la placa de video
+    model.draw();
+
+    // Intercambiar la memoria oculta con la visible (Double Buffering)
+    glfwSwapBuffers(window);
+    
+    // Procesar eventos del sistema operativo para evitar que la ventana se congele
+    glfwPollEvents();
+}

@@ -12,7 +12,8 @@ PYBIND11_MODULE(ar_helmet_core, m) {
     
     py::class_<Renderer>(m, "Renderer")
         .def(py::init<>())
-        .def("ping", &Renderer::ping);
+        .def("ping", &Renderer::ping)
+        .def("render", &Renderer::render);
     
     py::class_<Model>(m, "Model")
         .def(py::init<const std::string &>());
