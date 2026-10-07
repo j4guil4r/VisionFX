@@ -11,7 +11,7 @@ Renderer::Renderer() {
     
     // Nota: Mantenemos la ventana de GLFW oculta. 
     // Python se encargará de mostrar los resultados.
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
     // Creacion del contexto (ventana invisible de 1280x720)
     window = glfwCreateWindow(1280, 720, "AR Helmet Core", nullptr, nullptr);
@@ -26,6 +26,8 @@ Renderer::Renderer() {
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         throw std::runtime_error("[ERROR] Fallo al inicializar GLAD");
     }
+
+    glEnable(GL_DEPTH_TEST);
     
     std::cout << "[C++] Contexto OpenGL 3.3 Core e inicializador GLAD listos.\n";
 }
