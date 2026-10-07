@@ -69,5 +69,7 @@ Model::Model(const std::string& path) {
 }
 
 void Model::draw() const {
-    // TODO: Iterar vector meshes para enviarlo al Renderer
+    for(unsigned int i = 0; i < meshes.size(); ++i){
+        meshes[i].draw();
+    }
 }

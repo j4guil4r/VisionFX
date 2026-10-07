@@ -42,6 +42,16 @@ set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(assimp)
 
-pybind11_add_module(ar_helmet_core bindings/pybind_wrapper.cpp src/shader.cpp src/renderer.cpp src/model.cpp)
-target_link_libraries(ar_helmet_core PRIVATE OpenGL::GL glfw glm::glm assimp::assimp)
+FetchContent_Declare(
+  glad
+  GIT_REPOSITORY https://github.com/Dav1dde/glad.git
+  GIT_TAG        v0.1.36
+)
+set(GLAD_PROFILE "core" CACHE STRING "OpenGL profile" FORCE)
+set(GLAD_API "gl=3.3" CACHE STRING "API type/version" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+FetchContent_MakeAvailable(glad)
+
+pybind11_add_module(ar_helmet_core bindings/pybind_wrapper.cpp src/shader.cpp src/renderer.cpp src/model.cpp src/mesh.cpp)
+target_link_libraries(ar_helmet_core PRIVATE OpenGL::GL glfw glm::glm assimp::assimp glad)
 target_include_directories(ar_helmet_core PRIVATE include)
