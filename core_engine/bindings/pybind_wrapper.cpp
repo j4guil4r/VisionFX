@@ -17,4 +17,8 @@ PYBIND11_MODULE(ar_helmet_core, m) {
     
     py::class_<Model>(m, "Model")
         .def(py::init<const std::string &>());
+    
+    py::class_<Shader>(m, "Shader")
+        .def(py::init<const char*, const char*>())
+        .def("use", &Shader::use);
 }
