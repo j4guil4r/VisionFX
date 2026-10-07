@@ -22,8 +22,12 @@ Renderer::Renderer() {
 
     // Hacer que este hilo sea el dueño del contexto gráfico
     glfwMakeContextCurrent(window);
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
+        throw std::runtime_error("[ERROR] Fallo al inicializar GLAD");
+    }
     
-    std::cout << "[C++] Contexto OpenGL 3.3 inicializado correctamente con GLFW.\n";
+    std::cout << "[C++] Contexto OpenGL 3.3 Core e inicializador GLAD listos.\n";
 }
 
 Renderer::~Renderer() {
