@@ -1,7 +1,8 @@
 #version 330 core
+in vec3 Normal;
 out vec4 FragColor;
 
 void main() {
-    // RGBA: Rojo, Verde, Azul, Opacidad (Un color naranja sólido para probar)
-    FragColor = vec4(1.0, 0.5, 0.2, 1.0);
+    vec3 color = Normal * 0.5 + 0.5; 
+    FragColor = vec4(color, 1.0);
 }
