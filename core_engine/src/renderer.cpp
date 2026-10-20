@@ -23,6 +23,11 @@ Renderer::Renderer(int width, int height) : m_width(width), m_height(height){
     }
 
     glEnable(GL_DEPTH_TEST);
+
+    //glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+    
     setupOffscreen();
 }
 

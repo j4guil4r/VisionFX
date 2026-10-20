@@ -92,6 +92,7 @@ class VideoPipelineWorker(QThread):
 
     def run(self):
         print("[VideoWorker] Levantando motor C++ Offscreen...")
+        light_estimator = ar_helmet_core.LightEstimator()
         motor = ar_helmet_core.Renderer(1280, 720)
         shader = ar_helmet_core.Shader("core_engine/shaders/basic.vert", "core_engine/shaders/basic.frag")
         modelo = ar_helmet_core.Model("model.obj")
@@ -203,15 +204,29 @@ class VideoPipelineWorker(QThread):
                         # AJUSTAR A CONVENIENCIA (jugar con estos valores)
                         offset_y = -50
                         offset_z = 0.0
-                        
                         model_mat[1, 3] = offset_y
                         model_mat[2, 3] = offset_z
+                        
+                        light_dir, intensity, ambient_col = light_estimator.estimate(frame)
 
                         shader.use()
                         shader.set_mat4("projection", proj_mat.flatten('F').tolist())
                         shader.set_mat4("view", view_mat.flatten('F').tolist())
                         shader.set_mat4("model", model_mat.flatten('F').tolist())
-                        
+
+                        # En View Space:
+                        # +X = Derecha, +Y = Arriba, +Z = Hacia el usuario (hacia afuera de la pantalla)
+                        # Como la luz de tu cuarto/monitor viene desde tu lado hacia la pantalla, 
+                        # el vector HACIA la luz debe tener Z positivo (+1.0 o +2.0).
+                        lx = float(light_dir[0])
+                        ly = float(light_dir[1])
+                        lz = 1.5  # Forzamos Z frontal positivo hacia la cámara
+
+                        shader.set_vec3("lightDir", lx, ly, lz)
+                        shader.set_float("lightIntensity", max(float(intensity) * 1.5, 0.8))
+                        shader.set_vec3("ambientColor", 0.15, 0.15, 0.15) # Penumbra tenue para contrastar sombras
+                        shader.set_vec3("objectColor", 0.85, 0.45, 0.15)  # Naranja metálico / cobre
+                                                
                         motor.render(modelo)
                         fbo_pixels = motor.get_frame()
                         

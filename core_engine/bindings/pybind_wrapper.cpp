@@ -7,12 +7,13 @@
 #include "shader.hpp"
 #include "renderer.hpp"
 #include "model.hpp"
+#include "LightEstimator.hpp"
 
 namespace py = pybind11;
 
 
 PYBIND11_MODULE(ar_helmet_core, m) {
-    m.doc() = "Core engine nativo para AR-Helmet";
+    m.doc() = "Core engine nativo para VisionFX con estimacion de iluminacion";
     
     py::class_<Renderer>(m, "Renderer")
         .def(py::init<int, int>(), py::arg("width") = 1280, py::arg("height") = 720)
@@ -40,5 +41,26 @@ PYBIND11_MODULE(ar_helmet_core, m) {
             // make_mat4 lee los 16 floats y construye la matriz de OpenGL
             glm::mat4 mat = glm::make_mat4(value.data());
             self.setMat4(name, mat);
+        })
+        .def("set_vec3", &Shader::setVec3)
+        .def("set_float", &Shader::setFloat);
+
+    py::class_<LightEstimator>(m, "LightEstimator")
+        .def(py::init<>())
+        .def("estimate", [](LightEstimator& self, py::array_t<uint8_t> frame_np) {
+            py::buffer_info buf = frame_np.request();
+            if (buf.ndim != 3 || buf.shape[2] != 3) {
+                throw std::runtime_error("El frame debe ser un array 3D con 3 canales (H, W, 3).");
+            }
+            // Mapeo directo a cv::Mat sin duplicar memoria
+            cv::Mat mat(static_cast<int>(buf.shape[0]), static_cast<int>(buf.shape[1]), CV_8UC3, buf.ptr);
+            LightEstimate est = self.estimate(mat);
+
+            // Retorna una tupla: (direction_list, intensity, ambient_list)
+            return py::make_tuple(
+                std::vector<float>{est.direction[0], est.direction[1], est.direction[2]},
+                est.intensity,
+                std::vector<float>{est.ambientColor[0], est.ambientColor[1], est.ambientColor[2]}
+            );
         });
 }
