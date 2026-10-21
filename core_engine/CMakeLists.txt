@@ -9,6 +9,7 @@ set(PYBIND11_TEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(pybind11)
 
 find_package(OpenGL REQUIRED)
+find_package(OpenCV REQUIRED core imgproc)
 
 FetchContent_Declare(
   glfw
@@ -52,6 +53,30 @@ set(GLAD_API "gl=3.3" CACHE STRING "API type/version" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_MakeAvailable(glad)
 
-pybind11_add_module(ar_helmet_core bindings/pybind_wrapper.cpp src/shader.cpp src/renderer.cpp src/model.cpp src/mesh.cpp)
-target_link_libraries(ar_helmet_core PRIVATE OpenGL::GL glfw glm::glm assimp::assimp glad)
-target_include_directories(ar_helmet_core PRIVATE include)
+pybind11_add_module(ar_helmet_core
+  bindings/pybind_wrapper.cpp
+  src/shader.cpp
+  src/renderer.cpp
+  src/model.cpp
+  src/mesh.cpp
+  src/LightEstimator.cpp
+)
+
+target_compile_options(ar_helmet_core PRIVATE
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O3>
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/O2>
+)
+
+target_link_libraries(ar_helmet_core PRIVATE
+  OpenGL::GL
+  glfw
+  glm::glm
+  assimp::assimp
+  glad
+  ${OpenCV_LIBS}
+)
+
+target_include_directories(ar_helmet_core PRIVATE 
+  include
+  ${OpenCV_INCLUDE_DIRS}
+)
