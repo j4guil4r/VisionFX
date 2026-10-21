@@ -6,6 +6,7 @@ from PyQt6.QtCore import QMutex, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 import ar_helmet_core
+import platform
 
 try:
     from app_ui.gui import MainWindow
@@ -83,11 +84,20 @@ class VideoPipelineWorker(QThread):
         self.wait()
 
     def _open_camera(self, index: int):
-        cap = cv2.VideoCapture(index)
+        os = platform.system()
+        if os == "Linux":
+            cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
+        elif os == "Windows":
+            cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        else:
+            cap = cv2.VideoCapture(index) # macOS
+
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
         if cap.isOpened():
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-            cap.set(cv2.CAP_PROP_FPS, 60)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         return cap
 
     def run(self):
@@ -110,6 +120,8 @@ class VideoPipelineWorker(QThread):
         cap = self._open_camera(self._camera_index)
         prev_time = time.time()
         fps = 0.0
+
+        frame_count = 0
 
         while True:
             self._mutex.lock()
@@ -144,10 +156,12 @@ class VideoPipelineWorker(QThread):
                 self.msleep(100)
                 continue
 
+            t0 = time.perf_counter()
             ret, frame = cap.read()
             if not ret:
                 self.msleep(10)
                 continue
+            t1 = time.perf_counter()
 
             frame = cv2.flip(frame, 1)
             h, w = frame.shape[:2]
@@ -163,6 +177,7 @@ class VideoPipelineWorker(QThread):
             # Procesamiento de máscara y pose 3D si está activo
             if mask_on:
                 points_2d = self._detector.get_landmarks(frame)
+                t2 = time.perf_counter()
                 if points_2d:
                     pose = self._detector.estimate_pose(points_2d, self._cam_matrix, self._dist_coeffs)
                     if pose:
@@ -240,6 +255,7 @@ class VideoPipelineWorker(QThread):
                         alpha = gray_mask > 0
                         frame[alpha] = mask_frame[alpha]
 
+            t3 = time.perf_counter()
             # Cálculo y suavizado de FPS
             now = time.time()
             dt = now - prev_time
@@ -249,6 +265,10 @@ class VideoPipelineWorker(QThread):
 
             self.frame_ready.emit(frame)
             self.fps_updated.emit(fps)
+
+            frame_count+=1
+            if frame_count % 30 == 0:
+                print(f"[Profiling] Cam: {(t1-t0)*1000:.1f}ms | MediaPipe: {(t2-t1)*1000:.1f}ms | Render+Blend: {(t3-t2)*1000:.1f}ms")
 
         if cap is not None and cap.isOpened():
             cap.release()
