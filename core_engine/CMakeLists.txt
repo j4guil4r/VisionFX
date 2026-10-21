@@ -62,6 +62,11 @@ pybind11_add_module(ar_helmet_core
   src/LightEstimator.cpp
 )
 
+target_compile_options(ar_helmet_core PRIVATE
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O3>
+  $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/O2>
+)
+
 target_link_libraries(ar_helmet_core PRIVATE
   OpenGL::GL
   glfw

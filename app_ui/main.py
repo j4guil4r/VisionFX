@@ -233,7 +233,11 @@ class VideoPipelineWorker(QThread):
                         mask_frame = cv2.flip(fbo_pixels, 0)
                         mask_frame = cv2.cvtColor(mask_frame, cv2.COLOR_RGB2BGR)
                         
-                        alpha = np.any(mask_frame != [0, 0, 0], axis=-1)
+                        #alpha = np.any(mask_frame != [0, 0, 0], axis=-1)
+                        ## TODO: dejar de usar motor.get_frame() y usar OpenGL directamente
+                        ## no usaremos cv2.flip ni cv2.cvtColor
+                        gray_mask = cv2.cvtColor(mask_frame, cv2.COLOR_BGR2GRAY)
+                        alpha = gray_mask > 0
                         frame[alpha] = mask_frame[alpha]
 
             # Cálculo y suavizado de FPS
