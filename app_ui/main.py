@@ -11,6 +11,7 @@ import platform
 try:
     from app_ui.gui import MainWindow
     from app_ui.landmark_detector import LandmarkDetector
+    from app_ui.camera import CameraStream
 except ImportError:
     from gui import MainWindow
     from landmark_detector import LandmarkDetector
@@ -106,18 +107,20 @@ class VideoPipelineWorker(QThread):
         motor = ar_helmet_core.Renderer(1280, 720)
         shader = ar_helmet_core.Shader("core_engine/shaders/basic.vert", "core_engine/shaders/basic.frag")
         modelo = ar_helmet_core.Model("model.obj")
+
+        stream = CameraStream(self._camera_index).start()
         
         # Pre-calculamos la proyección y modelo
-        proj_mat = create_projection_matrix(45.0, 1280/720, 0.1, 1000.0)
+        #proj_mat = create_projection_matrix(45.0, 1280/720, 0.1, 1000.0)
         
         # Modelo
-        model_mat = np.eye(4, dtype=np.float32)
-        escala = 3.0
-        model_mat[0, 0] = -escala  # Escala y rotación 180° en Y simplificada
-        model_mat[1, 1] = escala
-        model_mat[2, 2] = -escala
+        #model_mat = np.eye(4, dtype=np.float32)
+        #escala = 3.0
+        #model_mat[0, 0] = -escala  # Escala y rotación 180° en Y simplificada
+        #model_mat[1, 1] = escala
+        #model_mat[2, 2] = -escala
 
-        cap = self._open_camera(self._camera_index)
+        #cap = self._open_camera(self._camera_index)
         prev_time = time.time()
         fps = 0.0
 
@@ -132,15 +135,15 @@ class VideoPipelineWorker(QThread):
             # Cambio de cámara en caliente
             if self._pending_camera_index != self._camera_index:
                 self._camera_index = self._pending_camera_index
-                if cap is not None and cap.isOpened():
-                    cap.release()
-                cap = self._open_camera(self._camera_index)
+                #if cap is not None and cap.isOpened():
+                #    cap.release()
+                #cap = self._open_camera(self._camera_index)
+                stream.change_camera(self._camera_index)
 
             mask_on = self._mask_enabled
             self._mutex.unlock()
 
-            if cap is None or not cap.isOpened():
-                # Frame placeholder si la cámara seleccionada no está disponible
+            if not stream.is_opened():
                 placeholder = np.zeros((720, 1280, 3), dtype=np.uint8)
                 cv2.putText(
                     placeholder,
@@ -157,9 +160,9 @@ class VideoPipelineWorker(QThread):
                 continue
 
             t0 = time.perf_counter()
-            ret, frame = cap.read()
-            if not ret:
-                self.msleep(10)
+            ret, frame = stream.read()
+            if not ret or frame is None:
+                self.msleep(2)
                 continue
             t1 = time.perf_counter()
 
@@ -270,9 +273,7 @@ class VideoPipelineWorker(QThread):
             if frame_count % 30 == 0:
                 print(f"[Profiling] Cam: {(t1-t0)*1000:.1f}ms | MediaPipe: {(t2-t1)*1000:.1f}ms | Render+Blend: {(t3-t2)*1000:.1f}ms")
 
-        if cap is not None and cap.isOpened():
-            cap.release()
-
+        stream.stop()
         del shader
         del motor
 
