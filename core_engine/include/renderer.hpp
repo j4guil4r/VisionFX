@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include "model.hpp"
+#include "shader.hpp"
 
 class Renderer {
 public:
@@ -18,7 +19,7 @@ public:
      * los polígonos del modelo 3D proporcionado.
      * @param model Referencia constante al modelo 3D cargado en VRAM.
      */
-    void render(const Model& model);
+    void render(const Model& model, const Shader& shader);
 
     /**
      * @brief Extrae los píxeles renderizados de la memoria de video.

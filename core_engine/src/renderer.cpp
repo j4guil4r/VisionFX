@@ -71,15 +71,13 @@ std::vector<uint8_t> Renderer::get_pixels() {
     return pixels;
 }
 
-void Renderer::render(const Model& model) {
-    // Redirigir el renderizado al FBO oculto
+void Renderer::render(const Model& model, const Shader& shader) {
     glBindFramebuffer(GL_FRAMEBUFFER, FBO);
     
-    // Limpiar con fondo negro transparente
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    model.draw();
+    model.draw(shader);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glfwPollEvents();

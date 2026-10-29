@@ -68,8 +68,23 @@ Model::Model(const std::string& path) {
               << meshes[0].vertices.size() << " vertices)\n";
 }
 
-void Model::draw() const {
-    for(unsigned int i = 0; i < meshes.size(); ++i){
+void Model::draw(const Shader& shader) const {
+    for(unsigned int i = 0; i < meshes.size(); ++i) {
+        if (i == 0 || i == 1) {
+            // --- SUBMALLAS 0 y 1: LENTES / VISORES (mat24) ---
+            // Azul cian translúcido o ámbar brillante con reflejo muy concentrado
+            shader.setVec3("objectColor", 0.10f, 0.80f, 0.95f);
+            shader.setFloat("shininess", 128.0f);            // Reflejo puntual nítido (vidrio)
+            //shader.setVec3("emission", 0.05f, 0.25f, 0.35f); // Brillo propio tenue de visor
+            shader.setVec3("emission", 0.0f, 0.6f, 0.8f);
+        } else {
+            // --- SUBMALLA 2: CUERPO DEL CASCO Y FILTRO (mat23) ---
+            // Cobre metálico opaco / rugoso
+            shader.setVec3("objectColor", 0.85f, 0.45f, 0.15f);
+            shader.setFloat("shininess", 16.0f);             // Reflejo suave disperso (metal mate)
+            shader.setVec3("emission", 0.0f, 0.0f, 0.0f);    // Sin emisión
+        }
+
         meshes[i].draw();
     }
 }

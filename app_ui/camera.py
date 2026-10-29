@@ -1,80 +1,80 @@
-import cv2
+import threading
+import platform
 import time
+import cv2
 import numpy as np
-from landmark_detector import LandmarkDetector
 
-# Ejes 3D de prueba (X: Derecha, Y: Arriba, Z: Frontal)
-AXES_3D = np.array([
-    [0.0, 0.0, 0.0],
-    [60.0, 0.0, 0.0],
-    [0.0, -60.0, 0.0],
-    [0.0, 0.0, -60.0]
-], dtype=np.float64)
 
-def main():
-    cap = cv2.VideoCapture(0)
-    w_cam, h_cam = 1280, 720
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, w_cam)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h_cam)
-    cap.set(cv2.CAP_PROP_FPS, 60)
-    
-    if not cap.isOpened():
-        print("[ERROR] No se pudo acceder a la cámara.")
-        return
+class CameraStream:
+    """Capturador asíncrono en hilo dedicado para desacoplar el bloqueo de I/O de la cámara."""
 
-    # Construir la matriz intrínseca de la cámara
-    cam_matrix = np.array([[w_cam, 0, w_cam / 2.0],
-                           [0, w_cam, h_cam / 2.0],
-                           [0, 0, 1.0]], dtype=np.float64)
-    dist_coeffs = np.zeros((4, 1), dtype=np.float64)
+    def __init__(self, camera_index: int = 0):
+        self._camera_index = camera_index
+        self._cap = None
+        self._ret = False
+        self._frame = None
+        self._running = False
+        self._lock = threading.Lock()
+        self._thread = None
+        self._open(self._camera_index)
 
-    detector = LandmarkDetector()
-    print("[INFO] Tracking 3D iniciado. Presiona 'Q' para salir.")
-    
-    prev_time = time.time()
-    fps = 0.0
+    def _open(self, index: int):
+        system_os = platform.system()
+        if system_os == "Linux":
+            cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
+        elif system_os == "Windows":
+            cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        else:
+            cap = cv2.VideoCapture(index)
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        if cap.isOpened():
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self._cap = cap
 
-        frame = cv2.flip(frame, 1)
+    def start(self):
+        if self._running:
+            return self
+        self._running = True
+        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self._thread.start()
+        return self
 
-        # Extraer puntos 2D y calcular pose 3D
-        points_2d = detector.get_landmarks(frame)
-        if points_2d:
-            pose = detector.estimate_pose(points_2d, cam_matrix, dist_coeffs)
-            
-            if pose:
-                rvec, tvec = pose
-                
-                # Proyectar ejes ortogonales al frame 2D
-                proj_axes, _ = cv2.projectPoints(AXES_3D, rvec, tvec, cam_matrix, dist_coeffs)
-                pts = proj_axes.reshape(-1, 2).astype(int)
-                origin = tuple(pts[0])
-                
-                # Dibujar X (Rojo), Y (Verde), Z (Azul)
-                cv2.line(frame, origin, tuple(pts[1]), (0, 0, 255), 3, cv2.LINE_AA)
-                cv2.line(frame, origin, tuple(pts[2]), (0, 255, 0), 3, cv2.LINE_AA)
-                cv2.line(frame, origin, tuple(pts[3]), (255, 0, 0), 3, cv2.LINE_AA)
+    def _capture_loop(self):
+        while self._running:
+            if self._cap is not None and self._cap.isOpened():
+                ret, frame = self._cap.read()
+                with self._lock:
+                    self._ret = ret
+                    self._frame = frame
+            else:
+                time.sleep(0.01)
 
-        now = time.time()
-        dt = now - prev_time
-        prev_time = now
-        if dt > 0:
-            fps = 0.9 * fps + 0.1 * (1.0 / dt)
+    def read(self):
+        with self._lock:
+            if not self._ret or self._frame is None:
+                return False, None
+            # Copia contigua para evitar condiciones de carrera con el hilo de render
+            return True, self._frame.copy()
 
-        cv2.putText(frame, f"FPS: {fps:.1f}", (20, 40), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    def is_opened(self) -> bool:
+        with self._lock:
+            return self._cap is not None and self._cap.isOpened()
 
-        cv2.imshow("AR Helmet - Tracking 3D", frame)
+    def change_camera(self, index: int):
+        with self._lock:
+            self._camera_index = index
+            if self._cap is not None and self._cap.isOpened():
+                self._cap.release()
+            self._open(index)
 
-        if cv2.waitKey(1) & 0xFF in [ord('q'), ord('Q'), 27]:
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-if __name__ == "__main__":
-    main()
+    def stop(self):
+        self._running = False
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=1.0)
+        with self._lock:
+            if self._cap is not None and self._cap.isOpened():
+                self._cap.release()
