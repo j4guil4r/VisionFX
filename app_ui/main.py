@@ -124,7 +124,7 @@ class VideoPipelineWorker(QThread):
         prev_time = time.time()
         fps = 0.0
 
-        frame_count = 0
+        #frame_count = 0
 
         while True:
             self._mutex.lock()
@@ -159,12 +159,12 @@ class VideoPipelineWorker(QThread):
                 self.msleep(100)
                 continue
 
-            t0 = time.perf_counter()
+            #t0 = time.perf_counter()
             ret, frame = stream.read()
             if not ret or frame is None:
                 self.msleep(2)
                 continue
-            t1 = time.perf_counter()
+            #t1 = time.perf_counter()
 
             frame = cv2.flip(frame, 1)
             h, w = frame.shape[:2]
@@ -180,7 +180,7 @@ class VideoPipelineWorker(QThread):
             # Procesamiento de máscara y pose 3D si está activo
             if mask_on:
                 points_2d = self._detector.get_landmarks(frame)
-                t2 = time.perf_counter()
+                #t2 = time.perf_counter()
                 if points_2d:
                     pose = self._detector.estimate_pose(points_2d, self._cam_matrix, self._dist_coeffs)
                     if pose:
@@ -220,8 +220,8 @@ class VideoPipelineWorker(QThread):
                         
                         # Traslación de compensación (Offset)
                         # AJUSTAR A CONVENIENCIA (jugar con estos valores)
-                        offset_y = -50
-                        offset_z = 0.0
+                        offset_y = -35
+                        offset_z = 15.0
                         model_mat[1, 3] = offset_y
                         model_mat[2, 3] = offset_z
                         
@@ -243,9 +243,9 @@ class VideoPipelineWorker(QThread):
                         shader.set_vec3("lightDir", lx, ly, lz)
                         shader.set_float("lightIntensity", max(float(intensity) * 1.5, 0.8))
                         shader.set_vec3("ambientColor", 0.15, 0.15, 0.15) # Penumbra tenue para contrastar sombras
-                        shader.set_vec3("objectColor", 0.85, 0.45, 0.15)  # Naranja metálico / cobre
+                        #shader.set_vec3("objectColor", 0.85, 0.45, 0.15)  # Naranja metálico / cobre
                                                 
-                        motor.render(modelo)
+                        motor.render(modelo, shader)
                         fbo_pixels = motor.get_frame()
                         
                         mask_frame = cv2.flip(fbo_pixels, 0)
@@ -258,7 +258,7 @@ class VideoPipelineWorker(QThread):
                         alpha = gray_mask > 0
                         frame[alpha] = mask_frame[alpha]
 
-            t3 = time.perf_counter()
+            #t3 = time.perf_counter()
             # Cálculo y suavizado de FPS
             now = time.time()
             dt = now - prev_time
@@ -269,9 +269,9 @@ class VideoPipelineWorker(QThread):
             self.frame_ready.emit(frame)
             self.fps_updated.emit(fps)
 
-            frame_count+=1
-            if frame_count % 30 == 0:
-                print(f"[Profiling] Cam: {(t1-t0)*1000:.1f}ms | MediaPipe: {(t2-t1)*1000:.1f}ms | Render+Blend: {(t3-t2)*1000:.1f}ms")
+            #frame_count+=1
+            #if frame_count % 30 == 0:
+            #    print(f"[Profiling] Cam: {(t1-t0)*1000:.1f}ms | MediaPipe: {(t2-t1)*1000:.1f}ms | Render+Blend: {(t3-t2)*1000:.1f}ms")
 
         stream.stop()
         del shader
