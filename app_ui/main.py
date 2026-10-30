@@ -238,11 +238,12 @@ class VideoPipelineWorker(QThread):
                         # el vector HACIA la luz debe tener Z positivo (+1.0 o +2.0).
                         lx = float(light_dir[0])
                         ly = float(light_dir[1])
-                        lz = 1.5  # Forzamos Z frontal positivo hacia la cámara
+                        #lz = 1.5  # Forzamos Z frontal positivo hacia la cámara
+                        lz = float(light_dir[2])
 
                         shader.set_vec3("lightDir", lx, ly, lz)
-                        shader.set_float("lightIntensity", max(float(intensity) * 1.5, 0.8))
-                        shader.set_vec3("ambientColor", 0.15, 0.15, 0.15) # Penumbra tenue para contrastar sombras
+                        shader.set_float("lightIntensity", float(intensity))
+                        shader.set_vec3("ambientColor", 0.12, 0.12, 0.12) # Penumbra tenue para contrastar sombras
                         #shader.set_vec3("objectColor", 0.85, 0.45, 0.15)  # Naranja metálico / cobre
                                                 
                         motor.render(modelo, shader)

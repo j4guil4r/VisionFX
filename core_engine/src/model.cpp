@@ -81,7 +81,7 @@ void Model::draw(const Shader& shader) const {
             // --- SUBMALLA 2: CUERPO DEL CASCO Y FILTRO (mat23) ---
             // Cobre metálico opaco / rugoso
             shader.setVec3("objectColor", 0.85f, 0.45f, 0.15f);
-            shader.setFloat("shininess", 16.0f);             // Reflejo suave disperso (metal mate)
+            shader.setFloat("shininess", 12.0f);             // Reflejo suave disperso (metal mate)
             shader.setVec3("emission", 0.0f, 0.0f, 0.0f);    // Sin emisión
         }
 

@@ -8,7 +8,6 @@ uniform vec3 lightDir;
 uniform float lightIntensity;
 uniform vec3 ambientColor;
 
-// --- Propiedades del Material ---
 uniform vec3 objectColor;
 uniform float shininess;
 uniform vec3 emission;
@@ -23,15 +22,17 @@ void main() {
 
     // 2. Luz Difusa
     float diff = max(dot(norm, lightDirNorm), 0.0);
-    diff = max(diff, 0.15);
     vec3 diffuse = diff * lightIntensity * objectColor;
 
-    // 3. Luz Especular (usa el shininess del material)
+    // 3. Luz Especular (SOLO si la cara mira a la luz: diff > 0.0)
     vec3 halfwayDir = normalize(lightDirNorm + viewDir);
-    float spec = pow(max(dot(norm, halfwayDir), 0.0), shininess);
-    vec3 specular = vec3(1.0, 1.0, 1.0) * spec * (lightIntensity * 0.8);
+    float spec = 0.0;
+    if (diff > 0.0) {
+        spec = pow(max(dot(norm, halfwayDir), 0.0), shininess);
+    }
+    vec3 specular = vec3(1.0, 1.0, 1.0) * spec * (lightIntensity * 0.9);
 
-    // Color final sumando emisión
+    // Composición final respetando el color del material
     vec3 result = ambient + diffuse + specular + emission;
     FragColor = vec4(result, 1.0);
 }
