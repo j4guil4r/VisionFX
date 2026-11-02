@@ -105,7 +105,9 @@ class VideoPipelineWorker(QThread):
         print("[VideoWorker] Levantando motor C++ Offscreen...")
         light_estimator = ar_helmet_core.LightEstimator()
         motor = ar_helmet_core.Renderer(1280, 720)
+        # Shaders
         shader = ar_helmet_core.Shader("core_engine/shaders/basic.vert", "core_engine/shaders/basic.frag")
+        bg_shader = ar_helmet_core.Shader("core_engine/shaders/camera_bg.vert", "core_engine/shaders/camera_bg.frag")
         modelo = ar_helmet_core.Model("model.obj")
 
         stream = CameraStream(self._camera_index).start()
@@ -187,12 +189,12 @@ class VideoPipelineWorker(QThread):
                         rvec, tvec = pose
                         
                         # -- DEBUG VISUAL: Dibujamos los ejes 3D de OpenCV --
-                        proj_axes, _ = cv2.projectPoints(AXES_3D, rvec, tvec, self._cam_matrix, self._dist_coeffs)
+                        """proj_axes, _ = cv2.projectPoints(AXES_3D, rvec, tvec, self._cam_matrix, self._dist_coeffs)
                         pts = proj_axes.reshape(-1, 2).astype(int)
                         origin = tuple(pts[0])
                         cv2.line(frame, origin, tuple(pts[1]), (0, 0, 255), 3, cv2.LINE_AA)
                         cv2.line(frame, origin, tuple(pts[2]), (0, 255, 0), 3, cv2.LINE_AA)
-                        cv2.line(frame, origin, tuple(pts[3]), (255, 0, 0), 3, cv2.LINE_AA)
+                        cv2.line(frame, origin, tuple(pts[3]), (255, 0, 0), 3, cv2.LINE_AA)"""
 
                         # -- PIPELINE OPENGL -- #
                         rmat, _ = cv2.Rodrigues(rvec)
@@ -246,7 +248,7 @@ class VideoPipelineWorker(QThread):
                         shader.set_vec3("ambientColor", 0.12, 0.12, 0.12) # Penumbra tenue para contrastar sombras
                         #shader.set_vec3("objectColor", 0.85, 0.45, 0.15)  # Naranja metálico / cobre
                                                 
-                        motor.render(modelo, shader)
+                        """motor.render(modelo, shader)
                         fbo_pixels = motor.get_frame()
                         
                         mask_frame = cv2.flip(fbo_pixels, 0)
@@ -257,7 +259,17 @@ class VideoPipelineWorker(QThread):
                         ## no usaremos cv2.flip ni cv2.cvtColor
                         gray_mask = cv2.cvtColor(mask_frame, cv2.COLOR_BGR2GRAY)
                         alpha = gray_mask > 0
-                        frame[alpha] = mask_frame[alpha]
+                        frame[alpha] = mask_frame[alpha]"""
+
+                        # 1. Subir el frame actual de OpenCV a la textura en GPU
+                        motor.update_camera_frame(frame)
+
+                        # 2. Renderizar escena compuesta (Fondo de cámara 2D + Casco 3D) 100% en GPU
+                        motor.render_scene(modelo, shader, bg_shader)
+                        
+                        # 3. Extraer el fotograma final ya compuesto
+                        # Solo se requiere el flip vertical porque OpenGL ubica el origen (0,0) abajo a la izquierda
+                        frame = cv2.flip(motor.get_frame(), 0)
 
             #t3 = time.perf_counter()
             # Cálculo y suavizado de FPS
