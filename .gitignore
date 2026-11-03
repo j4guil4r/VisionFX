@@ -1,5 +1,19 @@
+# Virtual environments
 .venv/
+venv/
+env/
+
+# Python cache & testing
 __pycache__/
-*.pyc
-build
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Build artifacts and compilation directory
+build/
+bin/
+
+# Compiled dynamic libraries
 *.so
+*.dylib
+*.dll

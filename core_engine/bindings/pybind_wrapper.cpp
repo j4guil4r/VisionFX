@@ -17,13 +17,20 @@ PYBIND11_MODULE(ar_helmet_core, m) {
     
     py::class_<Renderer>(m, "Renderer")
         .def(py::init<int, int>(), py::arg("width") = 1280, py::arg("height") = 720)
-        .def("ping", &Renderer::ping)
-        .def("render", &Renderer::render)
-        // Convertir std::vector a numpy.ndarray de (H, W, 3)
+        .def("render_scene", &Renderer::render_scene)
+        .def("get_pixels", &Renderer::get_pixels)
+        .def("update_camera_frame", [](Renderer& self, py::array_t<uint8_t, py::array::c_style | py::array::forcecast> array) {
+            py::buffer_info info = array.request();
+            if (info.ndim != 3) {
+                throw std::runtime_error("El frame de la cámara debe tener 3 dimensiones (H, W, C)");
+            }
+            int h = static_cast<int>(info.shape[0]);
+            int w = static_cast<int>(info.shape[1]);
+            self.update_camera_texture(static_cast<const uint8_t*>(info.ptr), w, h);
+        })
         .def("get_frame", [](Renderer& self) {
             auto pixels = self.get_pixels();
-            // Creamos un array numpy con las dimensiones del FBO
-            py::array_t<uint8_t> result({720, 1280, 3});
+            py::array_t<uint8_t> result({self.get_height(), self.get_width(), 3});
             auto req = result.request();
             std::memcpy(req.ptr, pixels.data(), pixels.size());
             return result;
