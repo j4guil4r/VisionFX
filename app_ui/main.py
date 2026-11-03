@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from PyQt6.QtCore import QMutex, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
+from app_ui.one_euro_filter import OneEuroFilter
 
 import ar_helmet_core
 import platform
@@ -110,6 +111,16 @@ class VideoPipelineWorker(QThread):
         bg_shader = ar_helmet_core.Shader("core_engine/shaders/camera_bg.vert", "core_engine/shaders/camera_bg.frag")
         modelo = ar_helmet_core.Model("model.obj")
 
+        # Filtros de pose para estabilizar rotación y traslación
+        filter_rvec = OneEuroFilter(min_cutoff=1.2, beta=0.8, d_cutoff=1.0)
+        # Traslación (mm): valores estándar
+        filter_tvec = OneEuroFilter(min_cutoff=0.8, beta=0.03, d_cutoff=1.0)
+
+        last_rvec = None
+        last_tvec = None
+        lost_frames = 0
+        MAX_LOST_FRAMES = 4
+
         stream = CameraStream(self._camera_index).start()
         
         # Pre-calculamos la proyección y modelo
@@ -182,94 +193,85 @@ class VideoPipelineWorker(QThread):
             # Procesamiento de máscara y pose 3D si está activo
             if mask_on:
                 points_2d = self._detector.get_landmarks(frame)
-                #t2 = time.perf_counter()
+                pose = None
+                
                 if points_2d:
                     pose = self._detector.estimate_pose(points_2d, self._cam_matrix, self._dist_coeffs)
-                    if pose:
-                        rvec, tvec = pose
-                        
-                        # -- DEBUG VISUAL: Dibujamos los ejes 3D de OpenCV --
-                        """proj_axes, _ = cv2.projectPoints(AXES_3D, rvec, tvec, self._cam_matrix, self._dist_coeffs)
-                        pts = proj_axes.reshape(-1, 2).astype(int)
-                        origin = tuple(pts[0])
-                        cv2.line(frame, origin, tuple(pts[1]), (0, 0, 255), 3, cv2.LINE_AA)
-                        cv2.line(frame, origin, tuple(pts[2]), (0, 255, 0), 3, cv2.LINE_AA)
-                        cv2.line(frame, origin, tuple(pts[3]), (255, 0, 0), 3, cv2.LINE_AA)"""
 
-                        # -- PIPELINE OPENGL -- #
-                        rmat, _ = cv2.Rodrigues(rvec)
-                        
-                        view_mat = np.eye(4, dtype=np.float32)
-                        view_mat[:3, :3] = rmat
-                        view_mat[:3, 3] = tvec.flatten()
-                        
-                        cv_to_gl = np.array([
-                            [ 1,  0,  0,  0],
-                            [ 0, -1,  0,  0],
-                            [ 0,  0, -1,  0],
-                            [ 0,  0,  0,  1]
-                        ], dtype=np.float32)
-                        view_mat = cv_to_gl @ view_mat
+                if pose:
+                    rvec_raw, tvec_raw = pose
+                    lost_frames = 0
+                    t_now = time.perf_counter()
 
-                        # Calculamos proyeccion exacta a partir del feed real
-                        # Aumentamos el plano lejano a 10000 para que no la recorte
-                        proj_mat = get_opengl_proj_from_opencv(self._cam_matrix, w, h, 0.1, 10000.0)
-                        escala_real = 450.0 
-                        model_mat = np.eye(4, dtype=np.float32)
-                        model_mat[0, 0] = escala_real 
-                        model_mat[1, 1] = -escala_real
-                        model_mat[2, 2] = escala_real
-                        
-                        # Traslación de compensación (Offset)
-                        # AJUSTAR A CONVENIENCIA (jugar con estos valores)
-                        offset_y = -35
-                        offset_z = 15.0
-                        model_mat[1, 3] = offset_y
-                        model_mat[2, 3] = offset_z
-                        
-                        light_dir, intensity, ambient_col = light_estimator.estimate(frame)
+                    # Filtrado adaptativo
+                    rvec = filter_rvec.filter(rvec_raw, t_now)
+                    tvec = filter_tvec.filter(tvec_raw, t_now)
+                    last_rvec = rvec.copy()
+                    last_tvec = tvec.copy()
 
-                        shader.use()
-                        shader.set_mat4("projection", proj_mat.flatten('F').tolist())
-                        shader.set_mat4("view", view_mat.flatten('F').tolist())
-                        shader.set_mat4("model", model_mat.flatten('F').tolist())
+                elif last_rvec is not None and lost_frames < MAX_LOST_FRAMES:
+                    # Si perdimos la cara por movimiento rápido, usamos la última pose conocida
+                    # Evita que el casco desaparezca o salte al centro de la pantalla
+                    lost_frames += 1
+                    rvec = last_rvec
+                    tvec = last_tvec
+                else:
+                    # Pérdida definitiva: reseteamos filtros y memoria de solvePnP
+                    lost_frames += 1
+                    last_rvec = None
+                    last_tvec = None
+                    filter_rvec.reset()
+                    filter_tvec.reset()
+                    self._detector.reset_pose()
+                    rvec, tvec = None, None
 
-                        # En View Space:
-                        # +X = Derecha, +Y = Arriba, +Z = Hacia el usuario (hacia afuera de la pantalla)
-                        # Como la luz de tu cuarto/monitor viene desde tu lado hacia la pantalla, 
-                        # el vector HACIA la luz debe tener Z positivo (+1.0 o +2.0).
-                        lx = float(light_dir[0])
-                        ly = float(light_dir[1])
-                        #lz = 1.5  # Forzamos Z frontal positivo hacia la cámara
-                        lz = float(light_dir[2])
+                # Renderizar solo si tenemos una pose válida
+                if rvec is not None and tvec is not None:
+                    # -- PIPELINE OPENGL -- #
+                    rmat, _ = cv2.Rodrigues(rvec)
+                    
+                    view_mat = np.eye(4, dtype=np.float32)
+                    view_mat[:3, :3] = rmat
+                    view_mat[:3, 3] = tvec.flatten()
+                    
+                    cv_to_gl = np.array([
+                        [ 1,  0,  0,  0],
+                        [ 0, -1,  0,  0],
+                        [ 0,  0, -1,  0],
+                        [ 0,  0,  0,  1]
+                    ], dtype=np.float32)
+                    view_mat = cv_to_gl @ view_mat
 
-                        shader.set_vec3("lightDir", lx, ly, lz)
-                        shader.set_float("lightIntensity", float(intensity))
-                        shader.set_vec3("ambientColor", 0.12, 0.12, 0.12) # Penumbra tenue para contrastar sombras
-                        #shader.set_vec3("objectColor", 0.85, 0.45, 0.15)  # Naranja metálico / cobre
-                                                
-                        """motor.render(modelo, shader)
-                        fbo_pixels = motor.get_frame()
-                        
-                        mask_frame = cv2.flip(fbo_pixels, 0)
-                        mask_frame = cv2.cvtColor(mask_frame, cv2.COLOR_RGB2BGR)
-                        
-                        #alpha = np.any(mask_frame != [0, 0, 0], axis=-1)
-                        ## TODO: dejar de usar motor.get_frame() y usar OpenGL directamente
-                        ## no usaremos cv2.flip ni cv2.cvtColor
-                        gray_mask = cv2.cvtColor(mask_frame, cv2.COLOR_BGR2GRAY)
-                        alpha = gray_mask > 0
-                        frame[alpha] = mask_frame[alpha]"""
+                    proj_mat = get_opengl_proj_from_opencv(self._cam_matrix, w, h, 0.1, 10000.0)
+                    escala_real = 450.0 
+                    model_mat = np.eye(4, dtype=np.float32)
+                    model_mat[0, 0] = escala_real 
+                    model_mat[1, 1] = -escala_real
+                    model_mat[2, 2] = escala_real
+                    
+                    offset_y = -35
+                    offset_z = 15.0
+                    model_mat[1, 3] = offset_y
+                    model_mat[2, 3] = offset_z
+                    
+                    light_dir, intensity, ambient_col = light_estimator.estimate(frame)
 
-                        # 1. Subir el frame actual de OpenCV a la textura en GPU
-                        motor.update_camera_frame(frame)
+                    shader.use()
+                    shader.set_mat4("projection", proj_mat.flatten('F').tolist())
+                    shader.set_mat4("view", view_mat.flatten('F').tolist())
+                    shader.set_mat4("model", model_mat.flatten('F').tolist())
 
-                        # 2. Renderizar escena compuesta (Fondo de cámara 2D + Casco 3D) 100% en GPU
-                        motor.render_scene(modelo, shader, bg_shader)
-                        
-                        # 3. Extraer el fotograma final ya compuesto
-                        # Solo se requiere el flip vertical porque OpenGL ubica el origen (0,0) abajo a la izquierda
-                        frame = cv2.flip(motor.get_frame(), 0)
+                    lx = float(light_dir[0])
+                    ly = float(light_dir[1])
+                    lz = float(light_dir[2])
+
+                    shader.set_vec3("lightDir", lx, ly, lz)
+                    shader.set_float("lightIntensity", float(intensity))
+                    shader.set_vec3("ambientColor", 0.12, 0.12, 0.12)
+                                            
+                    motor.update_camera_frame(frame)
+                    motor.render_scene(modelo, shader, bg_shader)
+                    frame = cv2.flip(motor.get_frame(), 0)
 
             #t3 = time.perf_counter()
             # Cálculo y suavizado de FPS
