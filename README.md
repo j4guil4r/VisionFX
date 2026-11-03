@@ -127,8 +127,8 @@ Si deseas compilar directamente sobre Windows sin WSL:
 
 4. **Advertencia de Compatibilidad OpenGL:**
 
-   > [!WARNING]
-   > Apple ha marcado la API de OpenGL como obsoleta (*deprecated*) en favor de Metal. No obstante, el sistema operativo mantiene soporte funcional para **OpenGL 3.3 Core Profile**. El motor fuerza explícitamente `GLFW_OPENGL_CORE_PROFILE` y `GLFW_CONTEXT_VERSION_MAJOR 3`, `GLFW_CONTEXT_VERSION_MINOR 3` en `core_engine/src/renderer.cpp`, garantizando compatibilidad tanto en Intel como en Apple Silicon mediante compatibilidad backward.
+> [!WARNING]
+> Apple ha marcado la API de OpenGL como obsoleta (*deprecated*) en favor de Metal. No obstante, el sistema operativo mantiene soporte funcional para **OpenGL 3.3 Core Profile**. El motor fuerza explícitamente `GLFW_OPENGL_CORE_PROFILE` y `GLFW_CONTEXT_VERSION_MAJOR 3`, `GLFW_CONTEXT_VERSION_MINOR 3` en `core_engine/src/renderer.cpp`, garantizando compatibilidad tanto en Intel como en Apple Silicon mediante compatibilidad backward.
 
 5. **Ejecutar:**
    ```bash
