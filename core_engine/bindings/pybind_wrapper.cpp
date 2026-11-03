@@ -17,8 +17,6 @@ PYBIND11_MODULE(ar_helmet_core, m) {
     
     py::class_<Renderer>(m, "Renderer")
         .def(py::init<int, int>(), py::arg("width") = 1280, py::arg("height") = 720)
-        .def("ping", &Renderer::ping)
-        .def("render", &Renderer::render)
         .def("render_scene", &Renderer::render_scene)
         .def("get_pixels", &Renderer::get_pixels)
         .def("update_camera_frame", [](Renderer& self, py::array_t<uint8_t, py::array::c_style | py::array::forcecast> array) {

@@ -10,8 +10,6 @@ class Renderer {
 public:
     Renderer(int width = 1280, int height = 720);
     ~Renderer();
-    
-    void ping();
 
     /**
      * @brief Sube el frame de la cámara (BGR de OpenCV) a la VRAM.
@@ -25,11 +23,6 @@ public:
      * 2. Limpia el buffer de profundidad y dibuja el modelo 3D encima con depth test.
      */
     void render_scene(const Model& model, const Shader& modelShader, const Shader& bgShader);
-
-    /**
-     * @brief Método legacy para renderizar solo el modelo sobre fondo transparente/negro.
-     */
-    void render(const Model& model, const Shader& shader);
 
     /**
      * @brief Extrae los píxeles compuestos finales en formato BGR.

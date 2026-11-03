@@ -1,5 +1,4 @@
 #include "renderer.hpp"
-#include <iostream>
 #include <stdexcept>
 
 Renderer::Renderer(int width, int height) 
@@ -148,21 +147,8 @@ void Renderer::render_scene(const Model& model, const Shader& modelShader, const
     glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos profundidad para el modelo
     glEnable(GL_DEPTH_TEST);      // Reactivamos depth test
 
-    modelShader.use();            // <--- AGREGAR ESTA LÍNEA AQUÍ
+    modelShader.use();
     model.draw(modelShader);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glfwPollEvents();
-}
-
-void Renderer::render(const Model& model, const Shader& shader) {
-    glBindFramebuffer(GL_FRAMEBUFFER, FBO);
-    glViewport(0, 0, m_width, m_height);
-    
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    model.draw(shader);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glfwPollEvents();
@@ -175,8 +161,4 @@ std::vector<uint8_t> Renderer::get_pixels() {
     glReadPixels(0, 0, m_width, m_height, GL_BGR, GL_UNSIGNED_BYTE, pixels.data());
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return pixels;
-}
-
-void Renderer::ping() {
-    std::cout << "Pong!.\n";
 }
