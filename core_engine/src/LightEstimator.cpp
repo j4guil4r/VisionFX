@@ -2,22 +2,19 @@
 #include <algorithm>
 #include <cmath>
 
-namespace {
+/*namespace {
 struct WeightLUT {
     float weights[256];
     WeightLUT() {
         for (int i = 0; i < 256; ++i) {
             float norm = static_cast<float>(i) / 255.0f;
-            // Ponderación continua suave:
-            // Permite que la luz ambiental de la habitación oriente el vector,
-            // pero si entra una linterna o foco brillante, absorbe el centroide.
             weights[i] = std::pow(norm, 2.5f);
         }
     }
 };
 
 static const WeightLUT kWeightLUT;
-} // namespace
+} // namespace*/
 
 LightEstimator::LightEstimator()
     : smoothingAlpha_(0.75f),
@@ -45,10 +42,8 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
 
     const int rows = gray.rows;
     const int cols = gray.cols;
-
-    // Paso 1: Encontrar el valor máximo de brillo en la escena
+    
     uint8_t maxVal = 0;
-    // Muestreo rápido de zancada (stride) para encontrar el pico en microsegundos
     for (int y = 0; y < rows; y += 4) {
         const uint8_t* rowPtr = gray.ptr<uint8_t>(y);
         for (int x = 0; x < cols; x += 4) {
@@ -56,8 +51,7 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
         }
     }
 
-    // Umbral dinámico: solo el 20% superior más brillante forma la fuente
-    // Evita que el fondo del cuarto arrastre el centroide
+    // Umbral dinámico
     uint8_t dynamicThreshold = (maxVal > 80) ? static_cast<uint8_t>(maxVal * 0.80f) : 255;
 
     double m00 = 0.0;
@@ -79,7 +73,6 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
         }
     }
 
-    // 2. Dirección libre: ahora normX y normY sí alcanzan ±0.9
     cv::Vec3f rawDirection(0.0f, 0.35f, 0.85f);
     if (m00 > 1.0) {
         float cx = static_cast<float>(m10 / m00);
@@ -88,17 +81,17 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
         float normX = (cx / static_cast<float>(cols) - 0.5f) * 2.0f;
         float normY = -(cy / static_cast<float>(rows) - 0.5f) * 2.0f;
 
-        // Proyección hemisférica: si X o Y crecen, Z DECAE
+        // Proyección hemisférica
         float r2 = normX * normX + normY * normY;
         float normZ = (r2 < 1.0f) ? std::sqrt(1.0f - r2) : 0.05f;
 
         rawDirection = cv::normalize(cv::Vec3f(normX, normY, normZ));
     }
 
-    // 3. Intensidad reactiva
+    // Intensidad reactiva
     float rawIntensity = (maxVal > 240) ? 1.0f : std::clamp(static_cast<float>(maxVal) / 255.0f + 0.1f, 0.35f, 0.85f);
 
-    // Suavizado EMA
+    // Suavizado
     float alphaDir = 0.70f;
     lastEstimate_.direction = cv::normalize(
         lastEstimate_.direction * alphaDir + rawDirection * (1.0f - alphaDir)

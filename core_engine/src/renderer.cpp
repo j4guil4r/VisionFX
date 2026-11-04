@@ -30,11 +30,11 @@ Renderer::Renderer(int width, int height)
 }
 
 void Renderer::setupOffscreen() {
-    // 1. Crear el Framebuffer
+    // Crear el Framebuffer
     glGenFramebuffers(1, &FBO);
     glBindFramebuffer(GL_FRAMEBUFFER, FBO);
 
-    // 2. Textura para el color final compuesto
+    // Textura para el color final compuesto
     glGenTextures(1, &textureColorBuffer);
     glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
@@ -42,7 +42,7 @@ void Renderer::setupOffscreen() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureColorBuffer, 0);
 
-    // 3. Buffer de profundidad para el z-buffer del modelo 3D
+    // Buffer de profundidad para el z-buffer del modelo 3D
     glGenRenderbuffers(1, &RBO);
     glBindRenderbuffer(GL_RENDERBUFFER, RBO);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_width, m_height);
@@ -52,8 +52,6 @@ void Renderer::setupOffscreen() {
 }
 
 void Renderer::setupCameraQuad() {
-    // Coordenadas NDC [-1.0, 1.0] que cubren toda la pantalla.
-    // Asignamos las UVs alineadas con el layout en memoria de OpenCV (fila 0 en la parte superior).
     float quadVertices[] = {
         // Posiciones     // UVs
         -1.0f,  1.0f,     0.0f, 0.0f, // Superior Izquierda
@@ -127,9 +125,7 @@ void Renderer::render_scene(const Model& model, const Shader& modelShader, const
     glBindFramebuffer(GL_FRAMEBUFFER, FBO);
     glViewport(0, 0, m_width, m_height);
 
-    // ==========================================
     // PASADA 1: DIBUJAR FONDO DE CÁMARA (2D)
-    // ==========================================
     glDisable(GL_DEPTH_TEST);
     
     bgShader.use();
@@ -141,9 +137,7 @@ void Renderer::render_scene(const Model& model, const Shader& modelShader, const
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 
-    // ==========================================
     // PASADA 2: DIBUJAR CASCO 3D (AR)
-    // ==========================================
     glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos profundidad para el modelo
     glEnable(GL_DEPTH_TEST);      // Reactivamos depth test
 

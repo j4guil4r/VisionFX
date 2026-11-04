@@ -62,11 +62,11 @@ class OneEuroFilter:
         rate = 1.0 / dt
         prev_x = self.x_filter.last()
 
-        # 1. Estimar velocidad (derivada discreta) y suavizarla
+        # Estimar velocidad (derivada discreta) y suavizarla
         dx = (x_arr - prev_x) * rate
         edx = self.dx_filter.filter(dx, self._alpha(rate, self.d_cutoff))
 
-        # 2. Calcular corte adaptativo componente a componente
+        # Calcular corte adaptativo componente a componente
         cutoff = self.min_cutoff + self.beta * np.abs(edx)
         alpha = self._alpha(rate, cutoff)
 

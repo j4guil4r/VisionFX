@@ -9,8 +9,8 @@
 #endif
 
 struct LightEstimate {
-    cv::Vec3f direction{0.0f, 1.0f, 1.0f}; // Vector 3D unitario hacia la luz dominante
-    float intensity{1.0f};                 // Intensidad normalizada [0.0, 1.0]
+    cv::Vec3f direction{0.0f, 1.0f, 1.0f};
+    float intensity{1.0f};
     cv::Vec3f ambientColor{0.2f, 0.2f, 0.2f};
 
 #if HAS_GLM_SUPPORT
@@ -26,7 +26,6 @@ public:
     explicit LightEstimator(float smoothingAlpha);
     ~LightEstimator();
 
-    // Estima dirección e intensidad de la luz dominante desde un frame cv::Mat
     LightEstimate estimate(const cv::Mat& frame);
 
     cv::Vec3f estimateDirection(const cv::Mat& frame);

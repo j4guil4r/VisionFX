@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include <vector>
 
-// Estructura de datos por vertice
+
 struct Vertex {
     glm::vec3 Position;
     glm::vec3 Normal;
