@@ -89,10 +89,9 @@ void Shader::use() const {
     glUseProgram(ID);
 }
 
-void Shader::setBool(const std::string &name, bool value) const {}
-void Shader::setInt(const std::string &name, int value) const {}
-
-void Shader::checkCompileErrors(unsigned int shader, std::string type) const {}
+void Shader::setBool(const std::string& /*name*/, bool /*value*/) const {}
+void Shader::setInt(const std::string& /*name*/, int /*value*/) const {}
+void Shader::checkCompileErrors(unsigned int /*shader*/, std::string /*type*/) const {}
 
 void Shader::setVec3(const std::string &name, float x, float y, float z) const {
     glUniform3f(glGetUniformLocation(ID, name.c_str()), x, y, z);
