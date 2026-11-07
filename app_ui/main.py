@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import cv2
@@ -48,6 +49,14 @@ class VideoPipelineWorker(QThread):
         self._pending_camera_index = camera_index
         self._mask_enabled = True
 
+        # Cola segura para cambio de modelo y parámetros de transformación en vivo
+        self._pending_model_path = None
+        self._transform_params = {
+            "scale": 450.0,
+            "offset": [0.0, -55.0, 180.0],
+            "rot": [0.0, 0.0, 0.0],
+        }
+
         self._detector = LandmarkDetector()
         self._cam_matrix = None
         self._dist_coeffs = np.zeros((4, 1), dtype=np.float64)
@@ -60,6 +69,20 @@ class VideoPipelineWorker(QThread):
     def change_camera(self, index: int):
         self._mutex.lock()
         self._pending_camera_index = index
+        self._mutex.unlock()
+
+    def change_model(self, path: str):
+        self._mutex.lock()
+        self._pending_model_path = path
+        self._mutex.unlock()
+
+    def update_transform(self, params: dict):
+        self._mutex.lock()
+        self._transform_params = {
+            "scale": float(params["scale"]),
+            "offset": list(params["offset"]),
+            "rot": list(params["rot"]),
+        }
         self._mutex.unlock()
 
     def stop(self):
@@ -76,7 +99,11 @@ class VideoPipelineWorker(QThread):
         # Shaders del pipeline compuesto en GPU
         shader = ar_helmet_core.Shader("core_engine/shaders/basic.vert", "core_engine/shaders/basic.frag")
         bg_shader = ar_helmet_core.Shader("core_engine/shaders/camera_bg.vert", "core_engine/shaders/camera_bg.frag")
-        modelo = ar_helmet_core.Model("assets/models/casco_v22.obj")
+
+        modelo = None
+        default_model = "assets/models/casco_v2.obj"
+        if os.path.exists(default_model):
+            modelo = ar_helmet_core.Model(default_model)
 
         # Filtros One-Euro para estabilizar rotación y traslación
         filter_rvec = OneEuroFilter(min_cutoff=1.2, beta=0.8, d_cutoff=1.0)
@@ -102,8 +129,24 @@ class VideoPipelineWorker(QThread):
                 self._camera_index = self._pending_camera_index
                 stream.change_camera(self._camera_index)
 
+            # Cambio de modelo 3D en caliente (dentro del contexto OpenGL activo)
+            new_model_path = self._pending_model_path
+            self._pending_model_path = None
+
             mask_on = self._mask_enabled
+            t_params = {
+                "scale": self._transform_params["scale"],
+                "offset": list(self._transform_params["offset"]),
+                "rot": list(self._transform_params["rot"]),
+            }
             self._mutex.unlock()
+
+            if new_model_path is not None and os.path.exists(new_model_path):
+                try:
+                    print(f"[VideoWorker] Cargando modelo en GPU: {new_model_path}")
+                    modelo = ar_helmet_core.Model(new_model_path)
+                except Exception as e:
+                    print(f"[VideoWorker] Error al cargar {new_model_path}: {e}")
 
             if not stream.is_opened():
                 placeholder = np.zeros((720, 1280, 3), dtype=np.uint8)
@@ -138,7 +181,7 @@ class VideoPipelineWorker(QThread):
                 ], dtype=np.float64)
 
             # Estimación de pose y renderizado AR compuesto
-            if mask_on:
+            if mask_on and modelo is not None:
                 points_2d = self._detector.get_landmarks(frame)
                 pose = None
 
@@ -189,18 +232,21 @@ class VideoPipelineWorker(QThread):
                     view_mat = cv_to_gl @ view_mat
 
                     proj_mat = get_opengl_proj_from_opencv(self._cam_matrix, w, h, 0.1, 10000.0)
-                    # escala = 450 antes
-                    escala_real = 450.0
-                    model_mat = np.eye(4, dtype=np.float32)
-                    model_mat[0, 0] = escala_real
-                    model_mat[1, 1] = -escala_real
-                    model_mat[2, 2] = escala_real
 
-                    # valores para el casco de gas y = -35; z = 15
-                    # valores para el casco iron man z = 120; y = "
-                    # valores para el casco futbol americano z = 180, y = -55 (y iron man (real))
-                    offset_y = -55.0
-                    offset_z = 180.0
+                    # Construcción dinámica de Model Matrix (Escala + Rotación local + Offset XYZ)
+                    escala_real = t_params["scale"]
+                    offset_x, offset_y, offset_z = t_params["offset"]
+                    rot_x, rot_y, rot_z = t_params["rot"]
+
+                    scale_mat = np.diag([escala_real, -escala_real, escala_real, 1.0]).astype(np.float32)
+
+                    rx, ry, rz = np.deg2rad(rot_x), np.deg2rad(rot_y), np.deg2rad(rot_z)
+                    rot_local, _ = cv2.Rodrigues(np.array([rx, ry, rz], dtype=np.float32))
+                    rot_mat = np.eye(4, dtype=np.float32)
+                    rot_mat[:3, :3] = rot_local
+
+                    model_mat = scale_mat @ rot_mat
+                    model_mat[0, 3] = offset_x
                     model_mat[1, 3] = offset_y
                     model_mat[2, 3] = offset_z
 
@@ -249,7 +295,12 @@ def main():
     worker.fps_updated.connect(window.update_fps)
     window.mask_toggled.connect(worker.set_mask_enabled)
     window.camera_changed.connect(worker.change_camera)
+    window.model_changed.connect(worker.change_model)
+    window.transform_changed.connect(worker.update_transform)
     window.window_closed.connect(worker.stop)
+
+    # Sincronizar el modelo seleccionado al iniciar
+    window.sync_initial_state()
 
     worker.start()
     window.show()
