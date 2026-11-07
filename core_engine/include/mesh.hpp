@@ -1,6 +1,8 @@
 #pragma once
+#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <vector>
+#include <string>
 
 
 struct Vertex {
@@ -9,13 +11,20 @@ struct Vertex {
     glm::vec2 TexCoords;
 };
 
+struct MeshMaterial {
+    glm::vec3 objectColor{0.85f, 0.45f, 0.15f};
+    float shininess{24.0f};
+    glm::vec3 emission{0.0f, 0.0f, 0.0f};
+};
+
 class Mesh {
 public:
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
-    unsigned int VAO;
+    unsigned int VAO{0};
+    MeshMaterial material;
     
-    Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices);
+    Mesh(std::vector<Vertex> in_vertices, std::vector<unsigned int> in_indices, MeshMaterial in_mat = MeshMaterial());
     /**
      * @brief Envía el comando de dibujo a la tarjeta gráfica.
      * Vincula el Vertex Array Object (VAO) actual y despacha los triángulos
@@ -25,7 +34,7 @@ public:
      */
     void draw() const;
 private:
-    unsigned int VBO, EBO;
+    unsigned int VBO{0}, EBO{0};
     /**
      * @brief Reserva y configura la memoria en la VRAM de la GPU.
      * Genera los buffers (VAO, VBO, EBO), transfiere los vectores de vértices

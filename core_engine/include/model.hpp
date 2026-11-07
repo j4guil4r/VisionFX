@@ -6,8 +6,10 @@
 
 class Model {
 public:
-    Model(const std::string& path);
+    explicit Model(const std::string& path);
     void draw(const Shader& shader) const;
+
+    const std::vector<Mesh>& getMeshes() const { return meshes; }
     
 private:
     std::vector<Mesh> meshes;

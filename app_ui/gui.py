@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+import ar_helmet_core
 
 
 class MainWindow(QMainWindow):
@@ -26,6 +27,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(800, 600)
         self._init_ui()
         self._apply_style()
+        self.setAcceptDrops(True)
 
     def _init_ui(self):
         central_widget = QWidget(self)
@@ -147,3 +149,38 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.window_closed.emit()
         super().closeEvent(event)
+
+    def dragEnterEvent(self, event):
+        """Valida que el archivo arrastrado termine en .obj"""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if len(urls) == 1 and urls[0].toLocalFile().lower().endswith('.obj'):
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    def dropEvent(self, event):
+        """Carga el nuevo modelo normalizado en tiempo real"""
+        file_path = event.mimeData().urls()[0].toLocalFile()
+        self.load_new_model(file_path)
+
+    def keyPressEvent(self, event):
+        """Atajos de teclado rápidos para la galería durante la demo"""
+        if event.key() == Qt.Key.Key_1:
+            self.load_new_model("assets/models/helmet.obj")
+        elif event.key() == Qt.Key.Key_2:
+            self.load_new_model("assets/models/glasses.obj")
+        elif event.key() == Qt.Key.Key_3:
+            self.load_new_model("assets/models/mask.obj")
+
+    def load_new_model(self, path: str):
+        if not os.path.exists(path):
+            return
+        try:
+            # Crea la nueva instancia de Model (se ejecuta el Auto-AABB en C++)
+            nuevo_modelo = ar_helmet_core.Model(path)
+            # Asigna la referencia atómicamente al hilo de renderizado
+            self.pipeline_worker.modelo = nuevo_modelo
+            print(f"[UI] Modelo cambiado exitosamente a: {path}")
+        except Exception as e:
+            QMessageBox.warning(self, "Error al cargar modelo", f"No se pudo cargar el archivo OBJ:\n{str(e)}")

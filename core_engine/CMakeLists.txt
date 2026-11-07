@@ -65,6 +65,19 @@ pybind11_add_module(ar_helmet_core
 target_compile_options(ar_helmet_core PRIVATE
   $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang>>:-O3>
   $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/O2>
+
+  $<$<CXX_COMPILER_ID:GNU,Clang>:
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wshadow
+    -Wnon-virtual-dtor
+    -Wold-style-cast
+  >
+
+  $<$<CXX_COMPILER_ID:MSVC>:
+    /W4
+  >
 )
 
 target_link_libraries(ar_helmet_core PRIVATE
@@ -76,7 +89,22 @@ target_link_libraries(ar_helmet_core PRIVATE
   ${OpenCV_LIBS}
 )
 
+
 target_include_directories(ar_helmet_core PRIVATE 
   include
+)
+
+target_include_directories(ar_helmet_core SYSTEM PRIVATE 
   ${OpenCV_INCLUDE_DIRS}
 )
+
+
+set_target_properties(glad glm glfw assimp PROPERTIES
+  SYSTEM ON
+)
+
+
+#target_include_directories(ar_helmet_core PRIVATE 
+#  include
+#  ${OpenCV_INCLUDE_DIRS}
+#)
