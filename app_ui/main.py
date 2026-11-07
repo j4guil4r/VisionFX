@@ -76,7 +76,7 @@ class VideoPipelineWorker(QThread):
         # Shaders del pipeline compuesto en GPU
         shader = ar_helmet_core.Shader("core_engine/shaders/basic.vert", "core_engine/shaders/basic.frag")
         bg_shader = ar_helmet_core.Shader("core_engine/shaders/camera_bg.vert", "core_engine/shaders/camera_bg.frag")
-        modelo = ar_helmet_core.Model("assets/models/Head_textures/hED2.obj")
+        modelo = ar_helmet_core.Model("assets/models/casco_v22.obj")
 
         # Filtros One-Euro para estabilizar rotación y traslación
         filter_rvec = OneEuroFilter(min_cutoff=1.2, beta=0.8, d_cutoff=1.0)
@@ -189,6 +189,7 @@ class VideoPipelineWorker(QThread):
                     view_mat = cv_to_gl @ view_mat
 
                     proj_mat = get_opengl_proj_from_opencv(self._cam_matrix, w, h, 0.1, 10000.0)
+                    # escala = 450 antes
                     escala_real = 450.0
                     model_mat = np.eye(4, dtype=np.float32)
                     model_mat[0, 0] = escala_real
@@ -197,8 +198,9 @@ class VideoPipelineWorker(QThread):
 
                     # valores para el casco de gas y = -35; z = 15
                     # valores para el casco iron man z = 120; y = "
-                    offset_y = -35.0
-                    offset_z = 120.0
+                    # valores para el casco futbol americano z = 180, y = -55 (y iron man (real))
+                    offset_y = -55.0
+                    offset_z = 180.0
                     model_mat[1, 3] = offset_y
                     model_mat[2, 3] = offset_z
 
