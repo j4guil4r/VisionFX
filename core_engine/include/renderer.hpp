@@ -30,12 +30,19 @@ public:
      */
     std::vector<uint8_t> get_pixels();
 
+    /**
+     * @brief Cambia en caliente el modo de sombreado activo (0: Realista, 1: Cel-Shading, 2: Cyberpunk).
+     */
+    void setRenderMode(int mode);
+    int getRenderMode() const { return m_renderMode; }
+
     int get_width() const { return m_width; }
     int get_height() const { return m_height; }
 
 private:
     GLFWwindow* window;
     int m_width, m_height;
+    int m_renderMode;
     
     // Framebuffer y renderbuffers offscreen
     unsigned int FBO, textureColorBuffer, RBO;

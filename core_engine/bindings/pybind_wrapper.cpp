@@ -11,13 +11,22 @@
 
 namespace py = pybind11;
 
+namespace {
+    Renderer* g_activeRenderer = nullptr;
+}
 
 PYBIND11_MODULE(ar_helmet_core, m) {
     m.doc() = "Core engine nativo para VisionFX con estimacion de iluminacion";
     
     py::class_<Renderer>(m, "Renderer")
-        .def(py::init<int, int>(), py::arg("width") = 1280, py::arg("height") = 720)
+        .def(py::init([](int width, int height) {
+            auto r = std::make_unique<Renderer>(width, height);
+            g_activeRenderer = r.get();
+            return r;
+        }), py::arg("width") = 1280, py::arg("height") = 720)
         .def("render_scene", &Renderer::render_scene)
+        .def("set_render_mode", &Renderer::setRenderMode, py::arg("mode"))
+        .def("get_render_mode", &Renderer::getRenderMode)
         .def("get_pixels", &Renderer::get_pixels)
         .def("update_camera_frame", [](Renderer& self, py::array_t<uint8_t, py::array::c_style | py::array::forcecast> array) {
             py::buffer_info info = array.request();
@@ -35,6 +44,12 @@ PYBIND11_MODULE(ar_helmet_core, m) {
             std::memcpy(req.ptr, pixels.data(), pixels.size());
             return result;
         });
+
+    m.def("set_render_mode", [](int mode) {
+        if (g_activeRenderer) {
+            g_activeRenderer->setRenderMode(mode);
+        }
+    }, py::arg("mode"), "Cambia el modo de sombreado activo en el motor (0: Realista, 1: Cel-Shading, 2: Cyberpunk)");
     
     py::class_<Model>(m, "Model")
         .def(py::init<const std::string &>());
@@ -50,7 +65,8 @@ PYBIND11_MODULE(ar_helmet_core, m) {
             self.setMat4(name, mat);
         })
         .def("set_vec3", &Shader::setVec3)
-        .def("set_float", &Shader::setFloat);
+        .def("set_float", &Shader::setFloat)
+        .def("set_int", &Shader::setInt);
 
     py::class_<LightEstimator>(m, "LightEstimator")
         .def(py::init<>())

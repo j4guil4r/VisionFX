@@ -1,8 +1,9 @@
 #include "renderer.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 Renderer::Renderer(int width, int height) 
-    : m_width(width), m_height(height), quadVAO(0), quadVBO(0), cameraTexture(0) {
+    : m_width(width), m_height(height), m_renderMode(0), quadVAO(0), quadVBO(0), cameraTexture(0) {
     if (!glfwInit()) throw std::runtime_error("[ERROR] Fallo al inicializar GLFW");
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -22,6 +23,8 @@ Renderer::Renderer(int width, int height)
     }
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     
@@ -121,12 +124,17 @@ void Renderer::update_camera_texture(const uint8_t* data, int width, int height)
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+void Renderer::setRenderMode(int mode) {
+    m_renderMode = std::clamp(mode, 0, 2);
+}
+
 void Renderer::render_scene(const Model& model, const Shader& modelShader, const Shader& bgShader) {
     glBindFramebuffer(GL_FRAMEBUFFER, FBO);
     glViewport(0, 0, m_width, m_height);
 
     // PASADA 1: DIBUJAR FONDO DE CÁMARA (2D)
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
     
     bgShader.use();
     glActiveTexture(GL_TEXTURE0);
@@ -140,8 +148,12 @@ void Renderer::render_scene(const Model& model, const Shader& modelShader, const
     // PASADA 2: DIBUJAR CASCO 3D (AR)
     glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos profundidad para el modelo
     glEnable(GL_DEPTH_TEST);      // Reactivamos depth test
+    glEnable(GL_BLEND);           // Habilitar canal alfa para modo holograma
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     modelShader.use();
+    modelShader.setInt("u_RenderMode", m_renderMode);
+    modelShader.setFloat("u_Time", static_cast<float>(glfwGetTime()));
     model.draw(modelShader);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

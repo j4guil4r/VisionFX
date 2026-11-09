@@ -30,6 +30,7 @@ class MainWindow(QMainWindow):
     camera_changed = pyqtSignal(int)
     model_changed = pyqtSignal(str)
     transform_changed = pyqtSignal(dict)
+    render_mode_changed = pyqtSignal(int)
     window_closed = pyqtSignal()
 
     def __init__(self):
@@ -277,7 +278,7 @@ class MainWindow(QMainWindow):
         if self._modal_mode is None:
             self.hud_label.setStyleSheet("background-color: #202026; color: #00e5ff; border: 1px solid #32323c; border-radius: 6px; padding: 8px 12px; font-family: monospace; font-weight: bold;")
             self.hud_label.setText(
-                f"[ATAJOS]  T: Mover | R: Rotar | S: Escala | Ctrl+R: Reset   ||   "
+                f"[ATAJOS]  F1/1: Realista | F2/2: Cel-Shading | F3/3: Cyberpunk  ||  T: Mover | R: Rotar | S: Escala   ||   "
                 f"Pos({ox:.0f}, {oy:.0f}, {oz:.0f}) | Rot({rx:.0f}°, {ry:.0f}°, {rz:.0f}°) | Escala: {sc:.0f}"
             )
             return
@@ -351,6 +352,17 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         key = event.key()
         mods = event.modifiers()
+
+        # Hot-switching de Shaders: F1, F2, F3 (y fallback numérico 1, 2, 3 fuera de edición modal)
+        if key == Qt.Key.Key_F1 or (self._modal_mode is None and key == Qt.Key.Key_1):
+            self.render_mode_changed.emit(0)
+            return
+        if key == Qt.Key.Key_F2 or (self._modal_mode is None and key == Qt.Key.Key_2):
+            self.render_mode_changed.emit(1)
+            return
+        if key == Qt.Key.Key_F3 or (self._modal_mode is None and key == Qt.Key.Key_3):
+            self.render_mode_changed.emit(2)
+            return
 
         # Atajo Ctrl+R: Resetear modelo actual a valores por defecto
         if key == Qt.Key.Key_R and (mods & Qt.KeyboardModifier.ControlModifier):

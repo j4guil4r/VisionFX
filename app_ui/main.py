@@ -2,12 +2,51 @@ import os
 import sys
 import time
 import cv2
+from pathlib import Path
 import numpy as np
 from PyQt6.QtCore import QMutex, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
-import ar_helmet_core
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+for _candidate in (
+    _PROJECT_ROOT / "build" / "core_engine",
+    _PROJECT_ROOT / "build" / "core_engine" / "Release",
+    _PROJECT_ROOT,
+):
+    _p = str(_candidate)
+    if _candidate.exists() and _p not in sys.path:
+        sys.path.insert(0, _p)
+
+import ar_helmet_core as core_engine
+ar_helmet_core = core_engine
+
 from app_ui.one_euro_filter import OneEuroFilter
+
+RENDER_MODE_LABELS = {
+    0: "Modo: Realista",
+    1: "Modo: Cel-Shading",
+    2: "Modo: Cyberpunk",
+}
+
+# Códigos de teclas F1, F2, F3 en OpenCV waitKey / waitKeyEx (Linux X11, Windows Win32, Qt) y fallback '1', '2', '3'
+KEY_TO_RENDER_MODE = {
+    ord("1"): 0,
+    ord("2"): 1,
+    ord("3"): 2,
+    65470: 0,       
+    65471: 1,       
+    65472: 2,       
+    190: 0,         
+    191: 1,         
+    192: 2,         
+    7340032: 0,     
+    7405568: 1,     
+    7471104: 2,     
+    0x01000030: 0,  
+    0x01000031: 1,  
+    0x01000032: 2,  
+}
 
 try:
     from app_ui.gui import MainWindow
@@ -48,6 +87,7 @@ class VideoPipelineWorker(QThread):
         self._camera_index = camera_index
         self._pending_camera_index = camera_index
         self._mask_enabled = True
+        self._render_mode = 0
 
         # Cola segura para cambio de modelo y parámetros de transformación en vivo
         self._pending_model_path = None
@@ -84,6 +124,21 @@ class VideoPipelineWorker(QThread):
             "rot": list(params["rot"]),
         }
         self._mutex.unlock()
+
+    def set_render_mode(self, mode: int):
+        self._mutex.lock()
+        self._render_mode = max(0, min(2, int(mode)))
+        self._mutex.unlock()
+
+    def handle_key(self, key: int) -> bool:
+        """Mapea teclas F1/F2/F3 y fallback '1'/'2'/'3' (compatible con cv2.waitKey y eventos Qt)."""
+        if key in KEY_TO_RENDER_MODE:
+            self.set_render_mode(KEY_TO_RENDER_MODE[key])
+            return True
+        if key != -1 and (key & 0xFF) in KEY_TO_RENDER_MODE:
+            self.set_render_mode(KEY_TO_RENDER_MODE[key & 0xFF])
+            return True
+        return False
 
     def stop(self):
         self._mutex.lock()
@@ -134,6 +189,7 @@ class VideoPipelineWorker(QThread):
             self._pending_model_path = None
 
             mask_on = self._mask_enabled
+            render_mode = self._render_mode
             t_params = {
                 "scale": self._transform_params["scale"],
                 "offset": list(self._transform_params["offset"]),
@@ -265,9 +321,24 @@ class VideoPipelineWorker(QThread):
                     shader.set_float("lightIntensity", float(intensity))
                     shader.set_vec3("ambientColor", 0.12, 0.12, 0.12)
 
+                    core_engine.set_render_mode(render_mode)
+                    motor.set_render_mode(render_mode)
                     motor.update_camera_frame(frame)
                     motor.render_scene(modelo, shader, bg_shader)
                     frame = cv2.flip(motor.get_frame(), 0)
+
+            # HUD en el frame indicando el modo de sombreado activo
+            hud_text = RENDER_MODE_LABELS.get(render_mode, "Modo: Realista")
+            cv2.putText(
+                frame,
+                hud_text,
+                (24, 42),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (0, 229, 255),
+                2,
+                cv2.LINE_AA,
+            )
 
             # Cálculo y suavizado de FPS
             now = time.time()
@@ -297,6 +368,7 @@ def main():
     window.camera_changed.connect(worker.change_camera)
     window.model_changed.connect(worker.change_model)
     window.transform_changed.connect(worker.update_transform)
+    window.render_mode_changed.connect(worker.set_render_mode)
     window.window_closed.connect(worker.stop)
 
     # Sincronizar el modelo seleccionado al iniciar
