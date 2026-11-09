@@ -80,7 +80,7 @@ class VideoPipelineWorker(QThread):
     frame_ready = pyqtSignal(np.ndarray)
     fps_updated = pyqtSignal(float)
 
-    def __init__(self, camera_index: int = 1):
+    def __init__(self, camera_index: int = 0):
         super().__init__()
         self._mutex = QMutex()
         self._running = True
@@ -359,7 +359,7 @@ def main():
     app = QApplication(sys.argv)
     window = MainWindow()
 
-    worker = VideoPipelineWorker(camera_index=1)
+    worker = VideoPipelineWorker(camera_index=0)
 
     # Conexión de señales y slots desacoplados
     worker.frame_ready.connect(window.update_frame)
