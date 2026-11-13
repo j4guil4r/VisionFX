@@ -52,7 +52,7 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
     }
 
     // Umbral dinámico
-    uint8_t dynamicThreshold = (maxVal > 80) ? static_cast<uint8_t>(maxVal * 0.80f) : 255;
+    uint8_t dynamicThreshold = (maxVal > 80) ? static_cast<uint8_t>(maxVal * 0.90f) : 255;
 
     double m00 = 0.0;
     double m10 = 0.0;
@@ -64,7 +64,8 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
         for (int x = 0; x < cols; ++x) {
             uint8_t val = rowPtr[x];
             if (val >= dynamicThreshold) {
-                float w = static_cast<float>(val - dynamicThreshold + 1);
+                float diff = static_cast<float>(val - dynamicThreshold + 1);
+                float w = diff * diff; // Peso cuadrático equilibrado
                 m00 += w;
                 m10 += x * w;
                 m01 += y * w;
@@ -73,23 +74,33 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
         }
     }
 
-    cv::Vec3f rawDirection(0.0f, 0.35f, 0.85f);
+    // Detectar si hay una fuente puntual (linterna/foco) o luz ambiental de salón
+    float spotRatio = static_cast<float>(brightPixels) / static_cast<float>(rows * cols);
+    bool isFlashlight = (maxVal >= 242 && spotRatio > 0.0005f && spotRatio < 0.065f);
+
+    cv::Vec3f rawDirection(0.0f, 0.35f, 0.90f);
     if (m00 > 1.0) {
         float cx = static_cast<float>(m10 / m00);
         float cy = static_cast<float>(m01 / m00);
 
-        float normX = (cx / static_cast<float>(cols) - 0.5f) * 2.0f;
-        float normY = -(cy / static_cast<float>(rows) - 0.5f) * 2.0f;
+        // En salón normal mueve suave (1.1f); con linterna abre el ángulo completo (2.2f)
+        float angleScale = isFlashlight ? 2.2f : 1.1f;
+        float maxLat = isFlashlight ? 0.95f : 0.60f;
 
-        // Proyección hemisférica
+        float normX = std::clamp((cx / static_cast<float>(cols) - 0.5f) * angleScale, -maxLat, maxLat);
+        float normY = std::clamp(-(cy / static_cast<float>(rows) - 0.5f) * angleScale, -maxLat, maxLat);
+
         float r2 = normX * normX + normY * normY;
-        float normZ = (r2 < 1.0f) ? std::sqrt(1.0f - r2) : 0.05f;
+        float minZ = isFlashlight ? 0.20f : 0.65f;
+        float normZ = (r2 < 1.0f) ? std::max(std::sqrt(1.0f - r2), minZ) : minZ;
 
         rawDirection = cv::normalize(cv::Vec3f(normX, normY, normZ));
     }
 
-    // Intensidad reactiva
-    float rawIntensity = (maxVal > 240) ? 1.0f : std::clamp(static_cast<float>(maxVal) / 255.0f + 0.1f, 0.35f, 0.85f);
+    // Intensidad estable (0.82f) en salón normal y boost (1.25f) cuando detecta linterna
+    float rawIntensity = isFlashlight
+        ? 1.25f
+        : std::clamp(static_cast<float>(maxVal) / 255.0f * 0.45f + 0.50f, 0.70f, 0.90f);
 
     // Suavizado
     float alphaDir = 0.70f;

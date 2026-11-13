@@ -17,3 +17,5 @@ bin/
 *.so
 *.dylib
 *.dll
+
+docs/

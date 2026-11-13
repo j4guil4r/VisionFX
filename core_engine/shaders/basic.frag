@@ -22,20 +22,28 @@ void main() {
     vec3 H = normalize(L + V);
 
     if (u_RenderMode == 1) {
-        // Modo 2: Cómic / Anime (Cel-Shading / Toon)
-        if (dot(N, V) < 0.25) {
-            FragColor = vec4(vec3(0.0), 1.0);
+        // Modo 2: Cómic / Anime (Cel-Shading calibrado para colores claros y oscuros)
+        if (dot(N, V) < 0.22) {
+            FragColor = vec4(vec3(0.02), 1.0);
         } else {
+            float halfLambert = dot(N, L) * 0.5 + 0.5;
+            
+            // 3 bandas bien diferenciadas: 0.0 (sombra), 0.5 (medio), 1.0 (luz)
+            float band = floor(halfLambert * 2.99) / 2.0;
+            // Sombra en 0.36 y luz máxima en 0.92 evita que el amarillo sature a plano
+            float toonFactor = mix(0.36, 0.92, band);
+
             float NdotL = max(dot(N, L), 0.0);
-            float intensity = floor(NdotL * 4.0) / 4.0;
-            float spec = (NdotL > 0.0) ? step(0.85, max(dot(N, H), 0.0)) : 0.0;
+            float specRaw = pow(max(dot(N, H), 0.0), max(shininess, 36.0));
+            float spec = (NdotL > 0.1) ? step(0.55, specRaw) : 0.0;
 
-            vec3 ambient = ambientColor * objectColor;
-            vec3 diffuse = intensity * lightIntensity * objectColor;
-            vec3 specular = vec3(1.0, 1.0, 1.0) * spec * (lightIntensity * 0.9);
+            float safeIntensity = clamp(lightIntensity, 0.80, 1.05);
 
-            vec3 result = ambient + diffuse + specular + emission;
-            FragColor = vec4(result, 1.0);
+            vec3 diffuse = objectColor * toonFactor * safeIntensity;
+            vec3 specular = mix(objectColor, vec3(1.0), 0.8) * spec * 0.40;
+
+            vec3 result = diffuse + specular + emission;
+            FragColor = vec4(clamp(result, 0.0, 1.0), 1.0);
         }
     } else if (u_RenderMode == 2) {
         // Modo 3: Cyberpunk / Holograma (Fresnel + Scanlines)
@@ -44,25 +52,35 @@ void main() {
         float scanline = 0.5 + 0.5 * sin(gl_FragCoord.y * 0.4 + u_Time * 5.0);
         FragColor = vec4(holoColor * (fresnel + 0.2) * scanline, clamp(fresnel * 0.9 + 0.1, 0.0, 1.0));
     } else {
-        // Modo 1 (u_RenderMode == 0): Realista (Blinn-Phong reactivo con atenuación)
-        float d = max(length(FragPos) / 600.0, 0.75);
-        float attenuation = 1.0 / (d * d);
+        // Modo 1 (u_RenderMode == 0): Realista con Tone Mapping suave y Alto Reflejo
+        vec3 ambient = max(ambientColor, vec3(0.16)) * objectColor;
 
-        // Luz Ambiental: I_a * k_a
-        vec3 ambient = ambientColor * objectColor;
-
-        // Luz Difusa: k_d * max(N · L, 0.0)
         float NdotL = max(dot(N, L), 0.0);
-        vec3 diffuse = objectColor * NdotL;
+        float wrapDiff = dot(N, L) * 0.5 + 0.5;
+        float directionalDiff = mix(pow(NdotL, 1.15), wrapDiff, 0.20);
+        // Ganancia difusa en 0.92 preserva el degradado en colores brillantes como el amarillo
+        vec3 diffuse = objectColor * directionalDiff * 0.92;
 
-        // Luz Especular: k_s * max(N · H, 0.0)^alpha
-        float spec = 0.0;
+        // Doble lóbulo especular para reflejos con linterna
+        float specBroad = 0.0;
+        float specSharp = 0.0;
         if (NdotL > 0.0) {
-            spec = pow(max(dot(N, H), 0.0), shininess);
+            float NdotH = max(dot(N, H), 0.0);
+            specBroad = pow(NdotH, 10.0) * 0.40;
+            specSharp = pow(NdotH, max(shininess, 48.0)) * 1.45;
         }
-        vec3 specular = vec3(0.9, 0.9, 0.9) * spec;
 
-        vec3 result = ambient + (diffuse + specular) * (lightIntensity * attenuation) + emission;
-        FragColor = vec4(result, 1.0);
+        vec3 specColor = mix(objectColor, vec3(1.0), 0.75);
+        vec3 specular = specColor * (specBroad + specSharp);
+
+        float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+        vec3 rimSpec = vec3(1.0) * fresnel * NdotL * 0.45;
+
+        float lightPower = pow(clamp(lightIntensity, 0.65, 1.35), 1.20) * 1.15;
+
+        vec3 rawColor = ambient + (diffuse + specular + rimSpec) * lightPower + emission;
+        // Compresión suave (Tone Mapping) para no quemar highlights
+        vec3 mapped = rawColor / (1.0 + rawColor * 0.22);
+        FragColor = vec4(clamp(mapped, 0.0, 1.0), 1.0);
     }
 }
