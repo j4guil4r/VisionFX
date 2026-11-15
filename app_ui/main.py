@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 from PyQt6.QtCore import QMutex, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication
+import json
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -76,9 +77,127 @@ def get_opengl_proj_from_opencv(cam_mat, width, height, near, far):
     return proj
 
 
+
+class TouchlessZone:
+    """Zona interactiva AR en pantalla activada al pasar la mano (diferencia óptica de frames)."""
+    BASE_W = 1280.0
+    BASE_H = 720.0
+
+    def __init__(self, rect: tuple[float, float, float, float], label: str, color: tuple[int, int, int]):
+        x1, y1, x2, y2 = rect
+        if max(x1, y1, x2, y2) > 1.0:
+            self.rel_rect = (
+                float(x1) / self.BASE_W,
+                float(y1) / self.BASE_H,
+                float(x2) / self.BASE_W,
+                float(y2) / self.BASE_H,
+            )
+        else:
+            self.rel_rect = (float(x1), float(y1), float(x2), float(y2))
+        self.label = label
+        self.color = color
+        self.prev_gray = None
+        self.last_trigger = 0.0
+        self.cooldown = 1.2
+        self.flash_until = 0.0
+
+    def _get_pixel_rect(self, frame: np.ndarray) -> tuple[int, int, int, int]:
+        w, h = frame.shape[1], frame.shape[0]
+        rx1, ry1, rx2, ry2 = self.rel_rect
+        x1 = max(0, min(w - 1, int(round(rx1 * w))))
+        y1 = max(0, min(h - 1, int(round(ry1 * h))))
+        x2 = max(x1 + 1, min(w, int(round(rx2 * w))))
+        y2 = max(y1 + 1, min(h, int(round(ry2 * h))))
+        return x1, y1, x2, y2
+
+    def check_motion(self, frame: np.ndarray) -> bool:
+        if frame is None or frame.size == 0:
+            return False
+        x1, y1, x2, y2 = self._get_pixel_rect(frame)
+        roi = frame[y1:y2, x1:x2]
+        if roi.size == 0:
+            return False
+        gray = cv2.GaussianBlur(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+
+        if self.prev_gray is not None and self.prev_gray.shape != gray.shape:
+            self.prev_gray = None
+
+        triggered = False
+        now = time.time()
+        if self.prev_gray is not None and (now - self.last_trigger) > self.cooldown:
+            diff = cv2.absdiff(self.prev_gray, gray)
+            _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+            motion_ratio = float(np.count_nonzero(thresh)) / float(max(1, thresh.size))
+            if motion_ratio > 0.22:
+                self.last_trigger = now
+                self.flash_until = now + 0.35
+                triggered = True
+
+        self.prev_gray = gray
+        return triggered
+
+    def draw(self, frame: np.ndarray):
+        if frame is None or frame.size == 0:
+            return
+        w, h = frame.shape[1], frame.shape[0]
+        x1, y1, x2, y2 = self._get_pixel_rect(frame)
+        now = time.time()
+        active_color = (0, 255, 120) if now < self.flash_until else self.color
+
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), active_color, -1)
+        cv2.addWeighted(overlay, 0.22, frame, 0.78, 0, frame)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), active_color, 2)
+        font_scale = max(0.38, min(0.65, 0.55 * (w / self.BASE_W)))
+        cv2.putText(
+            frame,
+            self.label,
+            (x1 + int(12 * (w / self.BASE_W)), (y1 + y2) // 2 + 6),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+
+def _draw_ocular_surge_fx(frame: np.ndarray, eye_centers: list[tuple[int, int]]):
+    """Dibuja núcleos de plasma y rayos eléctricos procedurales en los ojos durante la sobrecarga."""
+    if not eye_centers or frame is None or frame.size == 0:
+        return
+    h, w = frame.shape[:2]
+    rng = np.random.default_rng(int(time.time() * 30.0))
+    overlay = frame.copy()
+
+    for ex, ey in eye_centers:
+        if not (0 <= ex < w and 0 <= ey < h):
+            continue
+        # Halo de plasma exterior e interior
+        cv2.circle(overlay, (ex, ey), 22, (255, 220, 0), -1, cv2.LINE_AA)
+        cv2.circle(frame, (ex, ey), 8, (255, 255, 255), -1, cv2.LINE_AA)
+
+        # 4 arcos eléctricos quebrados irradiando desde cada ojo
+        for _ in range(4):
+            pts = [(ex, ey)]
+            cx, cy = float(ex), float(ey)
+            angle = rng.uniform(0, 2.0 * np.pi)
+            for _step in range(4):
+                length = rng.uniform(12.0, 26.0)
+                angle += rng.uniform(-0.65, 0.65)
+                cx += np.cos(angle) * length
+                cy += np.sin(angle) * length
+                pts.append((int(np.clip(cx, 0, w - 1)), int(np.clip(cy, 0, h - 1))))
+            for i in range(len(pts) - 1):
+                cv2.line(overlay, pts[i], pts[i + 1], (255, 230, 0), 4, cv2.LINE_AA)
+                cv2.line(frame, pts[i], pts[i + 1], (255, 255, 255), 1, cv2.LINE_AA)
+
+    cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+
+
 class VideoPipelineWorker(QThread):
     frame_ready = pyqtSignal(np.ndarray)
     fps_updated = pyqtSignal(float)
+    model_synced = pyqtSignal(str)
 
     def __init__(self, camera_index: int = 0):
         super().__init__()
@@ -99,36 +218,70 @@ class VideoPipelineWorker(QThread):
 
         self._detector = LandmarkDetector()
         self._cam_matrix = None
+        self._cam_dims = (0, 0)
         self._dist_coeffs = np.zeros((4, 1), dtype=np.float64)
+
+        models_dir = _PROJECT_ROOT / "assets" / "models"
+        self._available_models = sorted(str(p.resolve()) for p in models_dir.rglob("*.obj"))
+        self._current_model_idx = 0
+
+    def _apply_saved_calibration(self, model_path: str):
+        cal_file = _PROJECT_ROOT / "assets" / "models" / "calibration.json"
+        default_cfg = {"scale": 450.0, "offset": [0.0, -55.0, 180.0], "rot": [0.0, 0.0, 0.0]}
+        cfg = default_cfg
+        if cal_file.exists():
+            try:
+                data = json.loads(cal_file.read_text(encoding="utf-8"))
+                cfg = data.get(Path(model_path).name, default_cfg)
+            except Exception:
+                cfg = default_cfg
+        self._transform_params = {
+            "scale": float(cfg.get("scale", 450.0)),
+            "offset": list(cfg.get("offset", [0.0, -55.0, 180.0])),
+            "rot": list(cfg.get("rot", [0.0, 0.0, 0.0])),
+        }
 
     def set_mask_enabled(self, enabled: bool):
         self._mutex.lock()
-        self._mask_enabled = enabled
-        self._mutex.unlock()
+        try:
+            self._mask_enabled = enabled
+        finally:
+            self._mutex.unlock()
 
     def change_camera(self, index: int):
         self._mutex.lock()
-        self._pending_camera_index = index
-        self._mutex.unlock()
+        try:
+            self._pending_camera_index = index
+        finally:
+            self._mutex.unlock()
 
     def change_model(self, path: str):
+        resolved = str(Path(path).resolve()) if path else path
         self._mutex.lock()
-        self._pending_model_path = path
-        self._mutex.unlock()
+        try:
+            self._pending_model_path = resolved
+            if resolved in self._available_models:
+                self._current_model_idx = self._available_models.index(resolved)
+        finally:
+            self._mutex.unlock()
 
     def update_transform(self, params: dict):
         self._mutex.lock()
-        self._transform_params = {
-            "scale": float(params["scale"]),
-            "offset": list(params["offset"]),
-            "rot": list(params["rot"]),
-        }
-        self._mutex.unlock()
+        try:
+            self._transform_params = {
+                "scale": float(params["scale"]),
+                "offset": list(params["offset"]),
+                "rot": list(params["rot"]),
+            }
+        finally:
+            self._mutex.unlock()
 
     def set_render_mode(self, mode: int):
         self._mutex.lock()
-        self._render_mode = max(0, min(2, int(mode)))
-        self._mutex.unlock()
+        try:
+            self._render_mode = max(0, min(2, int(mode)))
+        finally:
+            self._mutex.unlock()
 
     def handle_key(self, key: int) -> bool:
         """Mapea teclas F1/F2/F3 y fallback '1'/'2'/'3' (compatible con cv2.waitKey y eventos Qt)."""
@@ -142,8 +295,10 @@ class VideoPipelineWorker(QThread):
 
     def stop(self):
         self._mutex.lock()
-        self._running = False
-        self._mutex.unlock()
+        try:
+            self._running = False
+        finally:
+            self._mutex.unlock()
         self.wait()
 
     def run(self):
@@ -152,11 +307,17 @@ class VideoPipelineWorker(QThread):
         motor = ar_helmet_core.Renderer(1280, 720)
 
         # Shaders del pipeline compuesto en GPU
-        shader = ar_helmet_core.Shader("core_engine/shaders/basic.vert", "core_engine/shaders/basic.frag")
-        bg_shader = ar_helmet_core.Shader("core_engine/shaders/camera_bg.vert", "core_engine/shaders/camera_bg.frag")
+        shader = ar_helmet_core.Shader(
+            str(_PROJECT_ROOT / "core_engine" / "shaders" / "basic.vert"),
+            str(_PROJECT_ROOT / "core_engine" / "shaders" / "basic.frag"),
+        )
+        bg_shader = ar_helmet_core.Shader(
+            str(_PROJECT_ROOT / "core_engine" / "shaders" / "camera_bg.vert"),
+            str(_PROJECT_ROOT / "core_engine" / "shaders" / "camera_bg.frag"),
+        )
 
         modelo = None
-        default_model = "assets/models/casco_v2.obj"
+        default_model = str(_PROJECT_ROOT / "assets" / "models" / "casco_v2.obj")
         if os.path.exists(default_model):
             modelo = ar_helmet_core.Model(default_model)
 
@@ -173,29 +334,38 @@ class VideoPipelineWorker(QThread):
         prev_time = time.time()
         fps = 0.0
 
+        zone_model = TouchlessZone((30, 85, 260, 165), "MANO: CASCO", (0, 229, 255))
+        zone_shader = TouchlessZone((1020, 85, 1250, 165), "MANO: SHADER", (255, 180, 0))
+
         while True:
             self._mutex.lock()
-            if not self._running:
+            try:
+                if not self._running:
+                    break
+
+                # Cambio de cámara en caliente (extraemos índice para no bloquear el mutex durante I/O)
+                cam_to_switch = None
+                if self._pending_camera_index != self._camera_index:
+                    self._camera_index = self._pending_camera_index
+                    cam_to_switch = self._camera_index
+
+                # Cambio de modelo 3D en caliente (dentro del contexto OpenGL activo)
+                new_model_path = self._pending_model_path
+                self._pending_model_path = None
+
+                mask_on = self._mask_enabled
+                render_mode = self._render_mode
+                t_params = {
+                    "scale": self._transform_params["scale"],
+                    "offset": list(self._transform_params["offset"]),
+                    "rot": list(self._transform_params["rot"]),
+                }
+            finally:
                 self._mutex.unlock()
-                break
 
-            # Cambio de cámara en caliente
-            if self._pending_camera_index != self._camera_index:
-                self._camera_index = self._pending_camera_index
-                stream.change_camera(self._camera_index)
-
-            # Cambio de modelo 3D en caliente (dentro del contexto OpenGL activo)
-            new_model_path = self._pending_model_path
-            self._pending_model_path = None
-
-            mask_on = self._mask_enabled
-            render_mode = self._render_mode
-            t_params = {
-                "scale": self._transform_params["scale"],
-                "offset": list(self._transform_params["offset"]),
-                "rot": list(self._transform_params["rot"]),
-            }
-            self._mutex.unlock()
+            if cam_to_switch is not None:
+                stream.change_camera(cam_to_switch)
+                self._cam_matrix = None
 
             if new_model_path is not None and os.path.exists(new_model_path):
                 try:
@@ -226,10 +396,36 @@ class VideoPipelineWorker(QThread):
                 continue
 
             frame = cv2.flip(frame, 1)
-            h, w = frame.shape[:2]
 
-            # Inicialización de matriz intrínseca de cámara
-            if self._cam_matrix is None:
+            if zone_model.check_motion(frame) and self._available_models:
+                self._current_model_idx = (self._current_model_idx + 1) % len(self._available_models)
+                next_model = self._available_models[self._current_model_idx]
+                try:
+                    print(f"[VideoWorker] Cambio gestual de modelo en GPU: {next_model}")
+                    modelo = ar_helmet_core.Model(next_model)
+                    self._mutex.lock()
+                    try:
+                        self._apply_saved_calibration(next_model)
+                        t_params = {
+                            "scale": self._transform_params["scale"],
+                            "offset": list(self._transform_params["offset"]),
+                            "rot": list(self._transform_params["rot"]),
+                        }
+                    finally:
+                        self._mutex.unlock()
+                    self.model_synced.emit(next_model)
+                except Exception as e:
+                    print(f"[VideoWorker] Error en cambio gestual al cargar {next_model}: {e}")
+
+            if zone_shader.check_motion(frame):
+                render_mode = (render_mode + 1) % 3
+                self.set_render_mode(render_mode)
+
+            w, h = frame.shape[1], frame.shape[0]
+
+            # Inicialización o actualización de matriz intrínseca de cámara según resolución real
+            if self._cam_matrix is None or self._cam_dims != (w, h):
+                self._cam_dims = (w, h)
                 self._cam_matrix = np.array([
                     [w, 0, w / 2.0],
                     [0, w, h / 2.0],
@@ -323,9 +519,24 @@ class VideoPipelineWorker(QThread):
 
                     core_engine.set_render_mode(render_mode)
                     motor.set_render_mode(render_mode)
+
+                    mouth_surge = self._detector.mouth_open_ratio > 0.13
+                    if mouth_surge:
+                        pulse = 1.8 + 0.5 * np.sin(time.time() * 16.0)
+                        shader.set_float("lightIntensity", float(intensity) * float(pulse))
+                        shader.set_vec3("ambientColor", 0.15, 0.45, 0.65)
+                        shader.set_float("u_Surge", 1.0)
+                    else:
+                        shader.set_float("lightIntensity", float(intensity))
+                        shader.set_vec3("ambientColor", 0.15, 0.15, 0.15)
+                        shader.set_float("u_Surge", 0.0)
+
                     motor.update_camera_frame(frame)
                     motor.render_scene(modelo, shader, bg_shader)
                     frame = cv2.flip(motor.get_frame(), 0)
+
+                    #if mouth_surge and self._detector.eye_centers_2d:
+                        #_draw_ocular_surge_fx(frame, self._detector.eye_centers_2d)
 
             # HUD en el frame indicando el modo de sombreado activo
             hud_text = RENDER_MODE_LABELS.get(render_mode, "Modo: Realista")
@@ -339,6 +550,20 @@ class VideoPipelineWorker(QThread):
                 2,
                 cv2.LINE_AA,
             )
+
+            zone_model.draw(frame)
+            zone_shader.draw(frame)
+            if mask_on and self._detector.mouth_open_ratio > 0.13:
+                cv2.putText(
+                    frame,
+                    "SOBRECARGA DE ENERGIA [BOCA]",
+                    (24, int(200 * (h / 720.0))),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.75,
+                    (0, 255, 180),
+                    2,
+                    cv2.LINE_AA,
+                )
 
             # Cálculo y suavizado de FPS
             now = time.time()
@@ -364,6 +589,7 @@ def main():
     # Conexión de señales y slots desacoplados
     worker.frame_ready.connect(window.update_frame)
     worker.fps_updated.connect(window.update_fps)
+    worker.model_synced.connect(window.sync_model_from_worker)
     window.mask_toggled.connect(worker.set_mask_enabled)
     window.camera_changed.connect(worker.change_camera)
     window.model_changed.connect(worker.change_model)

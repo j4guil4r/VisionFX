@@ -15,7 +15,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-CALIBRATION_FILE = Path("assets/models/calibration.json")
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CALIBRATION_FILE = _PROJECT_ROOT / "assets" / "models" / "calibration.json"
 
 DEFAULT_CALIBRATION = {
     "scale": 450.0,
@@ -218,7 +219,7 @@ class MainWindow(QMainWindow):
     # Gestión de Modelos (.obj)
     # -------------------------------------------------------------------------
     def _populate_models(self):
-        models_dir = Path("assets/models")
+        models_dir = _PROJECT_ROOT / "assets" / "models"
         models_dir.mkdir(parents=True, exist_ok=True)
 
         obj_files = sorted(models_dir.rglob("*.obj"))
@@ -227,15 +228,15 @@ class MainWindow(QMainWindow):
 
         for obj_path in obj_files:
             rel_name = obj_path.relative_to(models_dir).as_posix()
-            self.model_combo.addItem(rel_name, str(obj_path))
+            self.model_combo.addItem(rel_name, str(obj_path.resolve()))
 
         self.model_combo.blockSignals(False)
 
         if self.model_combo.count() > 0:
-            # Preferir casco_v22.obj si existe, si no el primero de la lista
+            # Preferir casco_v2.obj si existe, si no el primero de la lista
             default_idx = 0
             for i in range(self.model_combo.count()):
-                if "casco_v22.obj" in self.model_combo.itemText(i):
+                if "casco_v2.obj" in self.model_combo.itemText(i):
                     default_idx = i
                     break
             self.model_combo.setCurrentIndex(default_idx)
@@ -245,6 +246,24 @@ class MainWindow(QMainWindow):
         """Emite el modelo y transformación inicial cuando el worker ya está conectado."""
         if self.model_combo.count() > 0:
             self._on_model_combo_changed(self.model_combo.currentIndex())
+
+    def sync_model_from_worker(self, model_path: str):
+        """Sincroniza el QComboBox y el HUD cuando el modelo cambia mediante el gesto de mano."""
+        resolved_target = os.path.abspath(model_path)
+        self.model_combo.blockSignals(True)
+        for i in range(self.model_combo.count()):
+            if os.path.abspath(self.model_combo.itemData(i)) == resolved_target:
+                self.model_combo.setCurrentIndex(i)
+                break
+        self.model_combo.blockSignals(False)
+
+        self._modal_mode = None
+        self._modal_axis = None
+        self._input_buffer = ""
+        self._current_model_key = os.path.basename(resolved_target)
+        saved = self._calibrations.get(self._current_model_key, DEFAULT_CALIBRATION)
+        self._current_params = self._clone_params(saved)
+        self._update_hud_text()
 
     def _on_model_combo_changed(self, index: int):
         if index < 0:

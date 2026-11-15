@@ -116,12 +116,21 @@ void Renderer::update_camera_texture(const uint8_t* data, int width, int height)
         // Usar GL_BGR le indica a la GPU que OpenCV entrega bytes B-G-R,
         // permitiendo que el hardware reorganice a RGB en tiempo real a coste cero.
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, data);
+        glBindTexture(GL_TEXTURE_2D, 0);
     } else {
         m_width = width;
         m_height = height;
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_BGR, GL_UNSIGNED_BYTE, data);
+
+        // Redimensionar adjuntos del FBO (Color + Depth/Stencil) para coincidir con la nueva resolución
+        glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_width, m_height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        glBindRenderbuffer(GL_RENDERBUFFER, RBO);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, m_width, m_height);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
     }
-    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void Renderer::setRenderMode(int mode) {

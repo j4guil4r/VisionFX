@@ -29,13 +29,41 @@ class LandmarkDetector:
         self.prev_rvec = None
         self.prev_tvec = None
 
+        self.mouth_open_ratio = 0.0
+        self.eye_centers_2d = []
+
     def get_landmarks(self, frame_bgr):
+        if frame_bgr is None or frame_bgr.size == 0:
+            self.mouth_open_ratio = 0.0
+            self.eye_centers_2d = []
+            return None
+
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         results = self.face_mesh.process(frame_rgb)
         if not results.multi_face_landmarks:
+            self.mouth_open_ratio = 0.0
+            self.eye_centers_2d = []
             return None
         face = results.multi_face_landmarks[0]
+
+        # Calcular apertura de boca normalizada por altura facial (landmarks 13, 14, 10, 152)
+        lip_top = face.landmark[13]
+        lip_bot = face.landmark[14]
+        forehead = face.landmark[10]
+        chin = face.landmark[152]
+        face_h = ((forehead.x - chin.x) ** 2 + (forehead.y - chin.y) ** 2) ** 0.5
+        mouth_h = ((lip_top.x - lip_bot.x) ** 2 + (lip_top.y - lip_bot.y) ** 2) ** 0.5
+        self.mouth_open_ratio = (mouth_h / face_h) if face_h > 1e-5 else 0.0
+
         h, w = frame_bgr.shape[:2]
+
+        # Centros oculares 2D para efectos reactivos de sobrecarga
+        l_out, l_in = face.landmark[33], face.landmark[133]
+        r_out, r_in = face.landmark[263], face.landmark[362]
+        self.eye_centers_2d = [
+            (int((l_out.x + l_in.x) * 0.5 * w), int((l_out.y + l_in.y) * 0.5 * h)),
+            (int((r_out.x + r_in.x) * 0.5 * w), int((r_out.y + r_in.y) * 0.5 * h)),
+        ]
         
         points_2d = []
         for idx in self.landmark_indices:
