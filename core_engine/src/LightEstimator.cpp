@@ -2,19 +2,6 @@
 #include <algorithm>
 #include <cmath>
 
-/*namespace {
-struct WeightLUT {
-    float weights[256];
-    WeightLUT() {
-        for (int i = 0; i < 256; ++i) {
-            float norm = static_cast<float>(i) / 255.0f;
-            weights[i] = std::pow(norm, 2.5f);
-        }
-    }
-};
-
-static const WeightLUT kWeightLUT;
-} // namespace*/
 
 LightEstimator::LightEstimator()
     : smoothingAlpha_(0.75f),
@@ -65,7 +52,7 @@ LightEstimate LightEstimator::estimate(const cv::Mat& frame) {
             uint8_t val = rowPtr[x];
             if (val >= dynamicThreshold) {
                 float diff = static_cast<float>(val - dynamicThreshold + 1);
-                float w = diff * diff; // Peso cuadrático equilibrado
+                float w = diff * diff;
                 m00 += w;
                 m10 += x * w;
                 m01 += y * w;

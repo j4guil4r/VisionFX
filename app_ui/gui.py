@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("VisionFX - AR Pipeline UI")
+        self.setWindowTitle("VisionFX")
         self.resize(1050, 740)
         self.setMinimumSize(850, 620)
         self.setAcceptDrops(True)

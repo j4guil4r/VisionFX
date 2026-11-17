@@ -21,11 +21,11 @@ void Mesh::setupMesh() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
 
-    // Atributo 0: Posición (Usa nullptr en lugar de (void*)0)
+    // Atributo 0: Posición
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
     
-    // Atributo 1: Normal (Usa reinterpret_cast en lugar de casteo C)
+    // Atributo 1: Normal
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), 
                           reinterpret_cast<const void*>(offsetof(Vertex, Normal)));
